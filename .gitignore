@@ -8,3 +8,4 @@ firmware/esp32-sensor-node/config.h
 firmware/esp32-cam-node/config.h
 .DS_Store
 *.log
+.claude
