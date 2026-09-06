@@ -1,0 +1,10 @@
+node_modules/
+server/uploads/*
+!server/uploads/.gitkeep
+server/data/*
+!server/data/.gitkeep
+server/.env
+firmware/esp32-sensor-node/config.h
+firmware/esp32-cam-node/config.h
+.DS_Store
+*.log

@@ -1,0 +1,70 @@
+const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+const db = require('../db');
+const { analyzeImage } = require('../services/gemini');
+
+const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
+fs.mkdirSync(uploadsDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => cb(null, `${Date.now()}.jpg`),
+});
+const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
+
+module.exports = function imagesRouter(io) {
+  const router = express.Router();
+
+  const getLatestReading = db.prepare('SELECT * FROM sensor_readings ORDER BY id DESC LIMIT 1');
+  const insertImage = db.prepare(`
+    INSERT INTO images (filepath, temperature, humidity, gas_raw, weight_g)
+    VALUES (@filepath, @temperature, @humidity, @gas_raw, @weight_g)
+  `);
+  const updateVerdict = db.prepare(`
+    UPDATE images SET gemini_verdict = ?, gemini_notes = ?, gemini_raw = ? WHERE id = ?
+  `);
+  const getImage = db.prepare('SELECT * FROM images WHERE id = ?');
+  const getRecentImages = db.prepare('SELECT * FROM images ORDER BY id DESC LIMIT ?');
+
+  router.post('/', upload.single('image'), (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: 'multipart field "image" with a JPEG file is required' });
+    }
+
+    const snapshot = getLatestReading.get() || {};
+    const relativePath = `/uploads/${req.file.filename}`;
+
+    const info = insertImage.run({
+      filepath: relativePath,
+      temperature: snapshot.temperature ?? null,
+      humidity: snapshot.humidity ?? null,
+      gas_raw: snapshot.gas_raw ?? null,
+      weight_g: snapshot.weight_g ?? null,
+    });
+
+    const imageRow = getImage.get(info.lastInsertRowid);
+    io.emit('image:new', imageRow);
+    res.status(201).json(imageRow);
+
+    // Analyze asynchronously so the ESP32-CAM upload isn't held open waiting on Gemini.
+    const absolutePath = path.join(uploadsDir, req.file.filename);
+    analyzeImage(absolutePath, snapshot)
+      .then(({ verdict, notes, raw }) => {
+        updateVerdict.run(verdict, notes, raw, info.lastInsertRowid);
+        const updated = getImage.get(info.lastInsertRowid);
+        io.emit('image:analyzed', updated);
+      })
+      .catch((err) => {
+        console.error('Unexpected error analyzing image:', err);
+      });
+  });
+
+  router.get('/', (req, res) => {
+    const limit = Math.min(Number(req.query.limit) || 20, 200);
+    res.json(getRecentImages.all(limit));
+  });
+
+  return router;
+};

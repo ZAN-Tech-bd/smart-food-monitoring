@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "smart-food-monitoring-server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start", "--prefix", "server"],
+      "port": 3000
+    }
+  ]
+}

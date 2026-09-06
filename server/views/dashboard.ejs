@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Smart Food Monitoring</title>
+<link rel="stylesheet" href="/static/dashboard.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Smart Food Monitoring</h1>
+    <span id="connection-status" class="status-pill">connecting...</span>
+  </header>
+
+  <main>
+    <section class="cards">
+      <div class="card">
+        <span class="card-label">Temperature</span>
+        <span class="card-value" id="card-temperature">--</span>
+      </div>
+      <div class="card">
+        <span class="card-label">Humidity</span>
+        <span class="card-value" id="card-humidity">--</span>
+      </div>
+      <div class="card">
+        <span class="card-label">Gas Level</span>
+        <span class="card-value" id="card-gas">--</span>
+        <span class="badge" id="card-gas-badge">--</span>
+      </div>
+      <div class="card">
+        <span class="card-label">Weight</span>
+        <span class="card-value" id="card-weight">--</span>
+      </div>
+    </section>
+
+    <section class="panel image-panel">
+      <h2>Latest Capture</h2>
+      <div class="image-panel-body">
+        <img id="latest-image" alt="Latest capture" />
+        <div class="image-meta">
+          <span class="badge" id="verdict-badge">--</span>
+          <p id="verdict-notes">No image received yet.</p>
+          <p class="timestamp" id="image-timestamp"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Sensor History</h2>
+      <canvas id="history-chart" height="90"></canvas>
+    </section>
+
+    <section class="panel">
+      <h2>Image Log</h2>
+      <div class="gallery" id="gallery"></div>
+    </section>
+  </main>
+
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>

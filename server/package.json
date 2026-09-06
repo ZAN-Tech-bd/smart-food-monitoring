@@ -1,0 +1,20 @@
+{
+  "name": "smart-food-monitoring-server",
+  "version": "1.0.0",
+  "description": "Local server + admin dashboard for the smart food monitoring device",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "better-sqlite3": "^11.3.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "socket.io": "^4.8.0"
+  }
+}
