@@ -7,14 +7,12 @@ module.exports = function dashboardRouter() {
   const getLatestReading = db.prepare('SELECT * FROM sensor_readings ORDER BY id DESC LIMIT 1');
   const getLatestImage = db.prepare('SELECT * FROM images ORDER BY id DESC LIMIT 1');
   const getHistory = db.prepare('SELECT * FROM sensor_readings ORDER BY id DESC LIMIT ?');
-  const getRecentImages = db.prepare('SELECT * FROM images ORDER BY id DESC LIMIT ?');
 
   router.get('/summary', (req, res) => {
     res.json({
       latestReading: getLatestReading.get() || null,
       latestImage: getLatestImage.get() || null,
       history: getHistory.all(50).reverse(),
-      recentImages: getRecentImages.all(12),
       thresholds: {
         gasWarning: Number(process.env.GAS_WARNING_THRESHOLD) || 1500,
         gasDanger: Number(process.env.GAS_DANGER_THRESHOLD) || 2800,

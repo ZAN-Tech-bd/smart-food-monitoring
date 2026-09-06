@@ -1,17 +1,27 @@
 const socket = io();
 const statusPill = document.getElementById('connection-status');
+const lastUpdatedEl = document.getElementById('last-updated');
 
 socket.on('connect', () => {
-  statusPill.textContent = 'live';
   statusPill.classList.add('connected');
+  statusPill.innerHTML = '<span class="status-dot"></span>live';
 });
 socket.on('disconnect', () => {
-  statusPill.textContent = 'disconnected';
   statusPill.classList.remove('connected');
+  statusPill.innerHTML = '<span class="status-dot"></span>disconnected';
 });
 
 let thresholds = { gasWarning: 1500, gasDanger: 2800 };
 let chart;
+let latestImageId = null;
+
+const IMAGE_PAGE_SIZE = 5;
+let currentImagePage = 1;
+let totalImagePages = 1;
+
+function setLastUpdated() {
+  lastUpdatedEl.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+}
 
 function gasBadgeClass(raw) {
   if (raw >= thresholds.gasDanger) return 'danger';
@@ -29,6 +39,9 @@ function verdictBadgeClass(verdict) {
   if (verdict === 'Spoiled') return 'danger';
   return '';
 }
+function formatTime(createdAt) {
+  return new Date(createdAt + 'Z').toLocaleString();
+}
 
 function renderReading(reading) {
   if (!reading) return;
@@ -40,18 +53,35 @@ function renderReading(reading) {
   document.getElementById('card-gas').textContent = reading.gas_raw;
   gasBadge.textContent = gasLabel(reading.gas_raw);
   gasBadge.className = `badge ${gasBadgeClass(reading.gas_raw)}`;
+
+  setLastUpdated();
+}
+
+function renderSnapshotChips(image) {
+  const el = document.getElementById('capture-snapshot');
+  if (image.temperature == null) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = `
+    <span class="snapshot-chip">${Number(image.temperature).toFixed(1)} C</span>
+    <span class="snapshot-chip">${Number(image.humidity).toFixed(0)} % humidity</span>
+    <span class="snapshot-chip">Gas ${image.gas_raw} (${gasLabel(image.gas_raw)})</span>
+    <span class="snapshot-chip">${Number(image.weight_g).toFixed(0)} g</span>
+  `;
 }
 
 function renderImage(image) {
   if (!image) return;
   document.getElementById('latest-image').src = image.filepath;
-  document.getElementById('image-timestamp').textContent = new Date(image.created_at + 'Z').toLocaleString();
+  document.getElementById('image-timestamp').textContent = formatTime(image.created_at);
+  renderSnapshotChips(image);
 
   const verdictBadge = document.getElementById('verdict-badge');
   const notes = document.getElementById('verdict-notes');
 
   if (!image.gemini_verdict) {
-    verdictBadge.textContent = 'Analyzing...';
+    verdictBadge.textContent = 'Analyzing…';
     verdictBadge.className = 'badge';
     notes.textContent = 'Waiting for Gemini feedback.';
   } else {
@@ -61,27 +91,52 @@ function renderImage(image) {
   }
 }
 
-function prependGalleryItem(image) {
-  const gallery = document.getElementById('gallery');
-  const existing = document.getElementById(`gallery-item-${image.id}`);
-  if (existing) {
-    updateGalleryItem(existing, image);
-    return;
-  }
-
-  const item = document.createElement('div');
-  item.className = 'gallery-item';
-  item.id = `gallery-item-${image.id}`;
-  updateGalleryItem(item, image);
-  gallery.prepend(item);
-}
-
-function updateGalleryItem(el, image) {
-  el.innerHTML = `
-    <img src="${image.filepath}" alt="capture" />
-    <div class="gallery-item-meta">${image.gemini_verdict || 'Analyzing...'}</div>
+function galleryItemMarkup(image) {
+  const verdict = image.gemini_verdict || 'Analyzing…';
+  return `
+    <img src="${image.filepath}" alt="capture" loading="lazy" />
+    <div class="gallery-item-meta">
+      <span class="badge ${verdictBadgeClass(image.gemini_verdict)}">${verdict}</span>
+    </div>
+    <div class="gallery-item-meta">
+      <span class="gallery-item-time">${formatTime(image.created_at)}</span>
+    </div>
   `;
 }
+
+function renderGallery(items) {
+  const gallery = document.getElementById('gallery');
+  if (!items.length) {
+    gallery.innerHTML = '<p class="gallery-empty">No images captured yet.</p>';
+    return;
+  }
+  gallery.innerHTML = items
+    .map((image) => `<div class="gallery-item" id="gallery-item-${image.id}">${galleryItemMarkup(image)}</div>`)
+    .join('');
+}
+
+function updatePaginationControls({ page, totalPages, total }) {
+  currentImagePage = page;
+  totalImagePages = totalPages;
+  document.getElementById('page-indicator').textContent = `Page ${page} of ${totalPages}`;
+  document.getElementById('gallery-count').textContent = `${total} total`;
+  document.getElementById('prev-page').disabled = page <= 1;
+  document.getElementById('next-page').disabled = page >= totalPages;
+}
+
+async function loadImagePage(page) {
+  const res = await fetch(`/api/images?page=${page}&limit=${IMAGE_PAGE_SIZE}`);
+  const data = await res.json();
+  renderGallery(data.items);
+  updatePaginationControls(data);
+}
+
+document.getElementById('prev-page').addEventListener('click', () => {
+  if (currentImagePage > 1) loadImagePage(currentImagePage - 1);
+});
+document.getElementById('next-page').addEventListener('click', () => {
+  if (currentImagePage < totalImagePages) loadImagePage(currentImagePage + 1);
+});
 
 function renderHistory(history) {
   const labels = history.map((r) => new Date(r.created_at + 'Z').toLocaleTimeString());
@@ -107,6 +162,7 @@ function renderHistory(history) {
     options: {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { boxWidth: 10, boxHeight: 10 } } },
       scales: {
         y: { title: { display: true, text: 'Temp / Humidity' } },
         gas: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Gas (raw)' } },
@@ -120,9 +176,11 @@ async function loadSummary() {
   const data = await res.json();
   thresholds = data.thresholds;
   renderReading(data.latestReading);
-  renderImage(data.latestImage);
+  if (data.latestImage) {
+    latestImageId = data.latestImage.id;
+    renderImage(data.latestImage);
+  }
   renderHistory(data.history);
-  data.recentImages.forEach(prependGalleryItem);
 }
 
 socket.on('sensor:update', (reading) => {
@@ -130,13 +188,16 @@ socket.on('sensor:update', (reading) => {
 });
 
 socket.on('image:new', (image) => {
+  latestImageId = image.id;
   renderImage(image);
-  prependGalleryItem(image);
+  if (currentImagePage === 1) loadImagePage(1);
 });
 
 socket.on('image:analyzed', (image) => {
-  renderImage(image);
-  prependGalleryItem(image);
+  // Only update the Latest Capture panel if a newer image hasn't already replaced it.
+  if (image.id === latestImageId) renderImage(image);
+  if (currentImagePage === 1) loadImagePage(1);
 });
 
 loadSummary();
+loadImagePage(1);

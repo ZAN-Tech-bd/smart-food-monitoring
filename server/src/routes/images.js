@@ -26,7 +26,8 @@ module.exports = function imagesRouter(io) {
     UPDATE images SET gemini_verdict = ?, gemini_notes = ?, gemini_raw = ? WHERE id = ?
   `);
   const getImage = db.prepare('SELECT * FROM images WHERE id = ?');
-  const getRecentImages = db.prepare('SELECT * FROM images ORDER BY id DESC LIMIT ?');
+  const getImagesPage = db.prepare('SELECT * FROM images ORDER BY id DESC LIMIT ? OFFSET ?');
+  const countImages = db.prepare('SELECT COUNT(*) AS count FROM images');
 
   router.post('/', upload.single('image'), (req, res) => {
     if (!req.file) {
@@ -62,8 +63,15 @@ module.exports = function imagesRouter(io) {
   });
 
   router.get('/', (req, res) => {
-    const limit = Math.min(Number(req.query.limit) || 20, 200);
-    res.json(getRecentImages.all(limit));
+    const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 50);
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const offset = (page - 1) * limit;
+
+    const total = countImages.get().count;
+    const totalPages = Math.max(Math.ceil(total / limit), 1);
+    const items = getImagesPage.all(limit, offset);
+
+    res.json({ items, page, limit, total, totalPages });
   });
 
   return router;

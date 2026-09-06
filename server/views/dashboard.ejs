@@ -9,54 +9,105 @@
 <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
-  <header>
-    <h1>Smart Food Monitoring</h1>
-    <span id="connection-status" class="status-pill">connecting...</span>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a3 3 0 0 0 6 0V3M9 3v7M6 6h6M15 3c-1.5 2-1.5 5 0 7 1 1 1 2 1 3v8h2v-8c0-1 0-2 1-3 1.5-2 1.5-5 0-7"/></svg>
+      </span>
+      <div>
+        <h1>Smart Food Monitoring</h1>
+        <p class="brand-sub">Live sensor &amp; AI freshness dashboard</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="last-updated" id="last-updated">Waiting for data…</span>
+      <span class="status-pill" id="connection-status">
+        <span class="status-dot"></span>connecting
+      </span>
+    </div>
   </header>
 
   <main>
-    <section class="cards">
-      <div class="card">
-        <span class="card-label">Temperature</span>
-        <span class="card-value" id="card-temperature">--</span>
+    <section class="stat-grid">
+      <div class="stat-card" id="stat-temperature">
+        <span class="stat-icon icon-temp" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0Z"/></svg>
+        </span>
+        <div class="stat-body">
+          <span class="stat-label">Temperature</span>
+          <span class="stat-value" id="card-temperature">--</span>
+        </div>
       </div>
-      <div class="card">
-        <span class="card-label">Humidity</span>
-        <span class="card-value" id="card-humidity">--</span>
+
+      <div class="stat-card" id="stat-humidity">
+        <span class="stat-icon icon-humidity" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11Z"/></svg>
+        </span>
+        <div class="stat-body">
+          <span class="stat-label">Humidity</span>
+          <span class="stat-value" id="card-humidity">--</span>
+        </div>
       </div>
-      <div class="card">
-        <span class="card-label">Gas Level</span>
-        <span class="card-value" id="card-gas">--</span>
+
+      <div class="stat-card" id="stat-gas">
+        <span class="stat-icon icon-gas" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h11a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h9"/></svg>
+        </span>
+        <div class="stat-body">
+          <span class="stat-label">Gas Level</span>
+          <span class="stat-value" id="card-gas">--</span>
+        </div>
         <span class="badge" id="card-gas-badge">--</span>
       </div>
-      <div class="card">
-        <span class="card-label">Weight</span>
-        <span class="card-value" id="card-weight">--</span>
+
+      <div class="stat-card" id="stat-weight">
+        <span class="stat-icon icon-weight" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10l2 13H5L7 7Z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg>
+        </span>
+        <div class="stat-body">
+          <span class="stat-label">Weight</span>
+          <span class="stat-value" id="card-weight">--</span>
+        </div>
       </div>
     </section>
 
-    <section class="panel image-panel">
-      <h2>Latest Capture</h2>
-      <div class="image-panel-body">
-        <img id="latest-image" alt="Latest capture" />
-        <div class="image-meta">
-          <span class="badge" id="verdict-badge">--</span>
+    <section class="panel capture-panel">
+      <div class="panel-header">
+        <h2>Latest Capture</h2>
+        <span class="timestamp" id="image-timestamp"></span>
+      </div>
+      <div class="capture-body">
+        <div class="capture-image-wrap">
+          <img id="latest-image" alt="Latest capture" />
+        </div>
+        <div class="capture-details">
+          <span class="badge" id="verdict-badge">Waiting</span>
           <p id="verdict-notes">No image received yet.</p>
-          <p class="timestamp" id="image-timestamp"></p>
+          <div class="capture-snapshot" id="capture-snapshot"></div>
         </div>
       </div>
     </section>
 
     <section class="panel">
-      <h2>Sensor History</h2>
+      <div class="panel-header"><h2>Sensor History</h2></div>
       <canvas id="history-chart" height="90"></canvas>
     </section>
 
     <section class="panel">
-      <h2>Image Log</h2>
+      <div class="panel-header">
+        <h2>Image Log</h2>
+        <span class="muted" id="gallery-count"></span>
+      </div>
       <div class="gallery" id="gallery"></div>
+      <div class="pagination">
+        <button type="button" class="page-btn" id="prev-page" disabled>‹ Prev</button>
+        <span id="page-indicator">Page 1 of 1</span>
+        <button type="button" class="page-btn" id="next-page" disabled>Next ›</button>
+      </div>
     </section>
   </main>
+
+  <footer class="footer">Smart Food Monitoring · local network dashboard</footer>
 
   <script src="/static/dashboard.js"></script>
 </body>
