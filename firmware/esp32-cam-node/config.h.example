@@ -1,0 +1,11 @@
+// Copy this file to config.h and fill in your own values. config.h is gitignored.
+
+#define WIFI_SSID     "your-wifi-name"
+#define WIFI_PASSWORD "your-wifi-password"
+
+// Local IP (or hostname) of the PC/Pi running the server, e.g. 192.168.1.50
+#define SERVER_HOST "192.168.1.50"
+#define SERVER_PORT 3000
+
+// How often to capture + upload a photo (ms). 5 minutes = 300000.
+#define CAPTURE_INTERVAL_MS 300000

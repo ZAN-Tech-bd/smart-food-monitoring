@@ -34,10 +34,14 @@ HX711 scale;
 LiquidCrystal_I2C lcd(LCD_I2C_ADDRESS, 16, 2);
 
 #define WIFI_STATUS_INTERVAL_MS 5000
+// LCD screens rotate on their own timer so they stay readable even though
+// sensors are sampled once a second for the live dashboard.
+#define LCD_ROTATE_INTERVAL_MS 2500
 
 unsigned long lastSensorReadMs = 0;
 unsigned long lastServerPostMs = 0;
 unsigned long lastWifiStatusMs = 0;
+unsigned long lastLcdRotateMs = 0;
 uint8_t lcdScreen = 0;
 
 float lastTemperature = NAN;
@@ -88,7 +92,7 @@ void readSensors() {
   lastGasRaw = analogRead(MQ5_PIN);
 
   if (scale.is_ready()) {
-    lastWeightG = scale.get_units(5);
+    lastWeightG = scale.get_units(2);
     if (lastWeightG < 0) lastWeightG = 0;
   }
 
@@ -200,6 +204,10 @@ void loop() {
   if (now - lastSensorReadMs >= SENSOR_READ_INTERVAL_MS) {
     lastSensorReadMs = now;
     readSensors();
+  }
+
+  if (now - lastLcdRotateMs >= LCD_ROTATE_INTERVAL_MS) {
+    lastLcdRotateMs = now;
     updateLcd();
   }
 

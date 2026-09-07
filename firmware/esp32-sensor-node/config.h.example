@@ -1,0 +1,26 @@
+// Copy this file to config.h and fill in your own values. config.h is gitignored.
+
+#define WIFI_SSID     "your-wifi-name"
+#define WIFI_PASSWORD "your-wifi-password"
+
+// Local IP (or hostname) of the PC/Pi running the server, e.g. 192.168.1.50
+#define SERVER_HOST "192.168.1.50"
+#define SERVER_PORT 3000
+
+// How often to sample sensors (ms). DHT11 tops out around 1 reading/second,
+// so 1000 is the fastest this can go without misreads.
+#define SENSOR_READ_INTERVAL_MS 1000
+// How often to POST a reading to the server (ms). Matches the read interval
+// by default so the dashboard updates near-real-time.
+#define SERVER_POST_INTERVAL_MS 1000
+
+// MQ-5 raw ADC thresholds (0-4095 on ESP32). Calibrate for your unit/environment.
+#define GAS_WARNING_THRESHOLD 1500
+#define GAS_DANGER_THRESHOLD  2800
+
+// HX711 calibration factor: raw_reading / calibration_factor = grams.
+// Find this by placing a known weight and adjusting until the output matches.
+#define HX711_CALIBRATION_FACTOR 420.0f
+
+// LCD I2C address - try 0x27 first, 0x3F is the other common default.
+#define LCD_I2C_ADDRESS 0x27
