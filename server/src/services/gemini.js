@@ -22,6 +22,12 @@ function getClient() {
   return client;
 }
 
+function gasContext(gas_raw) {
+  const gasWarning = Number(process.env.GAS_WARNING_THRESHOLD) || 1500;
+  const gasDanger = Number(process.env.GAS_DANGER_THRESHOLD) || 2800;
+  return `${gas_raw ?? 'unknown'} - this sensor's own clean-air baseline is calibrated so that below ${gasWarning} is Normal, ${gasWarning}-${gasDanger} is Warning, and above ${gasDanger} is Danger. Judge the gas reading against THESE thresholds, not generic assumptions about raw ADC values.`;
+}
+
 function buildPrompt(sensorSnapshot) {
   const { temperature, humidity, gas_raw, weight_g } = sensorSnapshot;
   return `You are a food safety assistant analyzing a photo from an unattended food storage monitor.
@@ -29,7 +35,7 @@ function buildPrompt(sensorSnapshot) {
 Latest sensor readings at the time this photo was taken:
 - Temperature: ${temperature ?? 'unknown'} C
 - Humidity: ${humidity ?? 'unknown'} %
-- Gas/smoke sensor (raw analog, higher = more gas detected): ${gas_raw ?? 'unknown'}
+- Gas/smoke sensor (raw analog, higher = more gas detected): ${gasContext(gas_raw)}
 - Weight on the load cell: ${weight_g ?? 'unknown'} g
 
 Identify the food item visible in the photo, and look for visible signs of spoilage (mold, discoloration, wilting, liquid/mush, pests).
@@ -56,7 +62,7 @@ function buildSensorOnlyPrompt(sensorSnapshot) {
   return `You are a food safety assistant monitoring an unattended food storage unit. No camera photo is available right now, so base your assessment only on these sensor readings:
 - Temperature: ${temperature ?? 'unknown'} C
 - Humidity: ${humidity ?? 'unknown'} %
-- Gas/smoke sensor (raw analog, higher = more gas detected): ${gas_raw ?? 'unknown'}
+- Gas/smoke sensor (raw analog, higher = more gas detected): ${gasContext(gas_raw)}
 - Weight on the load cell: ${weight_g ?? 'unknown'} g
 
 Judge whether these readings look like normal, safe food storage conditions.
