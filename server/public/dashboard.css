@@ -152,6 +152,11 @@ main {
 .muted { color: var(--muted); font-size: 0.78rem; }
 .timestamp { color: var(--muted); font-size: 0.78rem; }
 
+/* ---------- AI status ---------- */
+
+.status-body { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.status-body p { margin: 0; line-height: 1.5; color: var(--text); flex: 1; min-width: 160px; }
+
 /* ---------- Latest capture ---------- */
 
 .capture-body { display: flex; gap: 22px; flex-wrap: wrap; }

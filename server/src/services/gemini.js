@@ -2,7 +2,7 @@ const fs = require('fs');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const apiKey = process.env.GEMINI_API_KEY;
-const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 
 let client = null;
 function getClient() {
@@ -25,6 +25,20 @@ Look at the image for visible signs of spoilage (mold, discoloration, wilting, l
 
 Respond with ONLY a compact JSON object, no markdown fences, no extra text, in exactly this shape:
 {"verdict": "Fresh" | "Caution" | "Spoiled" | "Unclear", "notes": "one or two short sentences explaining why"}`;
+}
+
+function buildSensorOnlyPrompt(sensorSnapshot) {
+  const { temperature, humidity, gas_raw, weight_g } = sensorSnapshot;
+  return `You are a food safety assistant monitoring an unattended food storage unit. No camera photo is available right now, so base your assessment only on these sensor readings:
+- Temperature: ${temperature ?? 'unknown'} C
+- Humidity: ${humidity ?? 'unknown'} %
+- Gas/smoke sensor (raw analog, higher = more gas detected): ${gas_raw ?? 'unknown'}
+- Weight on the load cell: ${weight_g ?? 'unknown'} g
+
+Judge whether these readings look like normal safe food storage conditions or not.
+
+Respond with ONLY a compact JSON object, no markdown fences, no extra text, in exactly this shape:
+{"verdict": "Good" | "Not Good", "notes": "one short sentence explaining why"}`;
 }
 
 function parseResponseText(text) {
@@ -70,4 +84,29 @@ async function analyzeImage(imagePath, sensorSnapshot) {
   }
 }
 
-module.exports = { analyzeImage, buildPrompt };
+/**
+ * Analyze sensor readings alone with Gemini, for when no photo is available
+ * yet (e.g. between camera captures, or if the camera node isn't set up).
+ * Same never-throws contract as analyzeImage - returns "Unknown" on failure.
+ */
+async function analyzeSensorsOnly(sensorSnapshot) {
+  const genAI = getClient();
+  if (!genAI) {
+    return { verdict: 'Unknown', notes: 'GEMINI_API_KEY is not configured on the server.', raw: null };
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const prompt = buildSensorOnlyPrompt(sensorSnapshot);
+
+    const result = await model.generateContent([{ text: prompt }]);
+
+    const text = result.response.text();
+    return parseResponseText(text);
+  } catch (err) {
+    console.error('Gemini sensor-only analysis failed:', err.message);
+    return { verdict: 'Unknown', notes: `Analysis failed: ${err.message}`, raw: null };
+  }
+}
+
+module.exports = { analyzeImage, analyzeSensorsOnly, buildPrompt, buildSensorOnlyPrompt };

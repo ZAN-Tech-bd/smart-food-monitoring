@@ -34,9 +34,9 @@ function gasLabel(raw) {
   return 'Normal';
 }
 function verdictBadgeClass(verdict) {
-  if (verdict === 'Fresh') return 'ok';
+  if (verdict === 'Fresh' || verdict === 'Good') return 'ok';
   if (verdict === 'Caution') return 'warn';
-  if (verdict === 'Spoiled') return 'danger';
+  if (verdict === 'Spoiled' || verdict === 'Not Good') return 'danger';
   return '';
 }
 function formatTime(createdAt) {
@@ -89,6 +89,20 @@ function renderImage(image) {
     verdictBadge.className = `badge ${verdictBadgeClass(image.gemini_verdict)}`;
     notes.textContent = image.gemini_notes || '';
   }
+}
+
+function renderStatus(status) {
+  if (!status) return;
+  const badge = document.getElementById('status-badge');
+  const notes = document.getElementById('status-notes');
+  const source = document.getElementById('status-source');
+  const timestamp = document.getElementById('status-timestamp');
+
+  badge.textContent = status.verdict || 'Unknown';
+  badge.className = `badge ${verdictBadgeClass(status.verdict)}`;
+  notes.textContent = status.notes || '';
+  source.textContent = status.source === 'image' ? 'from latest photo' : 'from sensor data (no recent photo)';
+  timestamp.textContent = status.created_at ? formatTime(status.created_at) : '';
 }
 
 function galleryItemMarkup(image) {
@@ -181,6 +195,7 @@ async function loadSummary() {
     renderImage(data.latestImage);
   }
   renderHistory(data.history);
+  renderStatus(data.currentStatus);
 }
 
 socket.on('sensor:update', (reading) => {
@@ -197,6 +212,11 @@ socket.on('image:analyzed', (image) => {
   // Only update the Latest Capture panel if a newer image hasn't already replaced it.
   if (image.id === latestImageId) renderImage(image);
   if (currentImagePage === 1) loadImagePage(1);
+  renderStatus({ source: 'image', verdict: image.gemini_verdict, notes: image.gemini_notes, created_at: image.created_at });
+});
+
+socket.on('status:update', (status) => {
+  renderStatus(status);
 });
 
 loadSummary();

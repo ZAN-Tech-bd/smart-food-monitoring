@@ -30,6 +30,19 @@ db.exec(`
     gemini_raw TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   );
+
+  -- Sensor-only Gemini checks, used as a fallback status when no recent photo
+  -- is available (image-based verdicts live on the images table above).
+  CREATE TABLE IF NOT EXISTS ai_status (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    verdict TEXT,
+    notes TEXT,
+    temperature REAL,
+    humidity REAL,
+    gas_raw INTEGER,
+    weight_g REAL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
 `);
 
 module.exports = db;
