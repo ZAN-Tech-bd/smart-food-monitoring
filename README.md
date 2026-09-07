@@ -181,7 +181,7 @@ Do this once, before flashing either board.
 5. Click **Upload**.
 6. Open **Tools → Serial Monitor** at 115200 baud. You should see WiFi connect, then periodic `POST /api/sensors -> 201` log lines (once the server is running — see below) and the LCD should start cycling through Temp/Humidity → Gas → Weight screens.
 
-**Calibrating the load cell** (`HX711_CALIBRATION_FACTOR`): with nothing on the scale, note the reading is ~0 (it tares on boot). Place an object of known weight (e.g. a 100g reference weight) on the scale, read the reported weight in the Serial Monitor, and adjust `HX711_CALIBRATION_FACTOR` up/down proportionally until the displayed weight matches the known weight, then re-upload.
+**Calibrating the load cell** (`HX711_CALIBRATION_FACTOR`): use the standalone `firmware/esp32-sensor-node/hx711_calibration/hx711_calibration.ino` sketch instead of guessing values in the main sketch. Upload it, follow the Serial Monitor prompts (tare with nothing on the scale, then type in the weight of a known reference object), and it prints the exact `HX711_CALIBRATION_FACTOR` to paste into `config.h`. Then re-flash the main `esp32-sensor-node.ino` sketch.
 
 ---
 
@@ -356,6 +356,8 @@ smart-food-monitoring/
     esp32-sensor-node/
       esp32-sensor-node.ino     # reads sensors, drives LCD, POSTs readings
       config.h.example          # copy to config.h and fill in WiFi/server details
+      hx711_calibration/
+        hx711_calibration.ino     # standalone sketch to find HX711_CALIBRATION_FACTOR
     esp32-cam-node/
       esp32-cam-node.ino        # captures + uploads a photo every 5 minutes
       config.h.example

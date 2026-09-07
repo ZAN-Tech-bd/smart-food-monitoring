@@ -19,7 +19,9 @@
 #define GAS_DANGER_THRESHOLD  2800
 
 // HX711 calibration factor: raw_reading / calibration_factor = grams.
-// Find this by placing a known weight and adjusting until the output matches.
+// Get this from firmware/esp32-sensor-node/hx711_calibration/hx711_calibration.ino.
+// It can come out NEGATIVE depending on your load cell's wiring polarity -
+// that's expected, just use it as printed, minus sign included.
 #define HX711_CALIBRATION_FACTOR 420.0f
 
 // LCD I2C address - try 0x27 first, 0x3F is the other common default.
