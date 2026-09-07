@@ -172,13 +172,26 @@ void handleButton() {
   lastButtonReading = reading;
 }
 
+int readGasRaw() {
+  // MQ-5's raw ADC value is noisy sample-to-sample (can swing +/-30-40%
+  // around the true level) - average a handful of quick samples so a single
+  // noise spike can't falsely trip the Warning/Danger threshold.
+  long sum = 0;
+  const int samples = 10;
+  for (int i = 0; i < samples; i++) {
+    sum += analogRead(MQ5_PIN);
+    delay(2);
+  }
+  return sum / samples;
+}
+
 void readSensors() {
   float h = dht.readHumidity();
   float t = dht.readTemperature();
   if (!isnan(h)) lastHumidity = h;
   if (!isnan(t)) lastTemperature = t;
 
-  lastGasRaw = analogRead(MQ5_PIN);
+  lastGasRaw = readGasRaw();
 
   if (scale.is_ready()) {
     lastWeightG = scale.get_units(2);

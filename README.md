@@ -178,7 +178,7 @@ Do this once, before flashing either board.
    - `WIFI_SSID`, `WIFI_PASSWORD` — your WiFi network
    - `SERVER_HOST` — the local IP address of the PC that will run the server (see [Server: install and run](#server-install-and-run) for how to find it), e.g. `192.168.1.50`
    - `SERVER_PORT` — leave as `3000` unless you changed it on the server
-   - `GAS_WARNING_THRESHOLD` / `GAS_DANGER_THRESHOLD` — raw ADC thresholds (0–4095) for the "Warning"/"Danger" gas labels; tune to your MQ-5 module and environment
+   - `GAS_WARNING_THRESHOLD` / `GAS_DANGER_THRESHOLD` — raw ADC thresholds (0–4095) for the "Warning"/"Danger" gas labels — see the MQ-5 calibration note below rather than guessing these
    - `HX711_CALIBRATION_FACTOR` — see calibration note below
    - `LCD_I2C_ADDRESS` — from your I2C scan, usually `0x27` or `0x3F`
 3. Wire the board per [Circuit diagrams / wiring](#circuit-diagrams--wiring) above. Make sure nothing is on the load cell.
@@ -189,6 +189,8 @@ Do this once, before flashing either board.
 **The push button** toggles the LCD to a second mode: it fetches the latest Gemini verdict + notes from the server and shows it (scrolling the notes line if it's longer than 16 characters), refreshing every 5 seconds while you're on that screen. Press it again to go back to the sensor screens.
 
 **Calibrating the load cell** (`HX711_CALIBRATION_FACTOR`): use the standalone `firmware/esp32-sensor-node/hx711_calibration/hx711_calibration.ino` sketch instead of guessing values in the main sketch. Upload it, follow the Serial Monitor prompts (tare with nothing on the scale, then type in the weight of a known reference object), and it prints the exact `HX711_CALIBRATION_FACTOR` to paste into `config.h`. Then re-flash the main `esp32-sensor-node.ino` sketch.
+
+**Calibrating the gas sensor** (`GAS_WARNING_THRESHOLD` / `GAS_DANGER_THRESHOLD`): use the standalone `firmware/esp32-sensor-node/mq5_calibration/mq5_calibration.ino` sketch. Upload it, leave the sensor in clean air for at least 2 minutes to warm up, and it prints a rolling baseline plus suggested threshold values based on it. It also actively checks for the sensor reading being stuck at the ADC maximum (4095) — a common wiring/power issue (the module's AOUT exceeding the ESP32's 3.3V ADC limit, or a short) rather than real gas — and will tell you to fix that instead of printing meaningless thresholds. New MQ-5 sensors also need a 24–48 hour "burn-in" period before their readings are fully reliable; the sketch's header comment has details.
 
 ---
 
@@ -381,6 +383,8 @@ smart-food-monitoring/
       config.h.example          # copy to config.h and fill in WiFi/server details
       hx711_calibration/
         hx711_calibration.ino     # standalone sketch to find HX711_CALIBRATION_FACTOR
+      mq5_calibration/
+        mq5_calibration.ino        # standalone sketch to find GAS_WARNING_THRESHOLD / GAS_DANGER_THRESHOLD
     esp32-cam-node/
       esp32-cam-node.ino        # captures + uploads a photo every 5 minutes
       config.h.example
@@ -419,7 +423,7 @@ smart-food-monitoring/
 | AI screen shows "No WiFi" | The board lost its WiFi connection — check `printWifiStatus()`'s periodic Serial log; the AI screen only fetches over WiFi, unlike the sensor screens which just show cached local readings |
 | AI screen shows "Fetch failed" | The server is unreachable at `SERVER_HOST:SERVER_PORT` from the sensor node, or it's not running — same checks as the sensor POST failures above |
 | Weight reading is wildly wrong | Re-run the calibration steps in [Flashing the sensor node](#firmware-flashing-the-sensor-node); make sure the scale was empty at boot (tare happens on startup) |
-| Gas reading always low/high | MQ-5 sensors need a short warm-up period after power-on and are sensitive to their specific module's onboard potentiometer/comparator setting; adjust `GAS_WARNING_THRESHOLD`/`GAS_DANGER_THRESHOLD` to your observed baseline |
+| Gas reading always low/high, or stuck at 4095 | Run `firmware/esp32-sensor-node/mq5_calibration/mq5_calibration.ino` — it prints a live baseline and actively flags a reading stuck at the ADC max as a wiring/power issue (module output exceeding 3.3V, a short, or a bad pin) rather than something to threshold around |
 | ESP32-CAM won't flash / upload fails | Make sure GPIO0 is tied to GND and the board was reset right before clicking Upload; some FTDI adapters need to be set to 5V, others 3.3V — check your CAM board's specs; try a slower upload speed in Tools if it fails repeatedly |
 | Camera image never appears on dashboard | Check the CAM node's Serial Monitor for the `POST /api/images` status code; confirm the server is reachable at `SERVER_HOST:SERVER_PORT` from the CAM's network |
 | Dashboard shows verdict "Unknown" with a GEMINI_API_KEY message | You haven't set `GEMINI_API_KEY` in `server/.env` yet, or it's invalid — see [Getting a Gemini API key](#getting-a-gemini-api-key), then restart the server |
