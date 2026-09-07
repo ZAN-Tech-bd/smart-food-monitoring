@@ -28,7 +28,7 @@ This README is self-contained: follow it top to bottom and you can build the who
 ```
                  WiFi (HTTP POST /api/sensors, every 30s)
  [ESP32 Sensor Node] ─────────────────────────────────────────┐
-   DHT22, MQ-5,                                                │
+   DHT11, MQ-5,                                                │
    HX711+load cell,                                            ▼
    16x2 I2C LCD                                     ┌────────────────────┐
                                                      │   Node.js server    │
@@ -62,10 +62,10 @@ This README is self-contained: follow it top to bottom and you can build the who
 | 1 | ESP32-CAM (AI-Thinker module) | Camera node — takes and uploads photos |
 | 1 | FTDI / USB-to-serial adapter (3.3V or 5V logic) | Needed to flash the ESP32-CAM, which has no onboard USB |
 | 1 | MQ-5 smoke/LPG gas sensor module | Gas/smoke detection |
-| 1 | DHT22 (AM2302) temperature/humidity sensor | Temperature + humidity |
+| 1 | DHT11 temperature/humidity sensor | Temperature + humidity |
 | 1 | 16x2 LCD with I2C backpack (PCF8574, address `0x27` or `0x3F`) | On-device readout |
 | 1 | Load cell (e.g. 1kg/5kg bar-type) + HX711 amplifier board | Weight of stored food |
-| — | Breadboard, jumper wires, 10kΩ resistor (for DHT22 pull-up if not built into your module), 5V power supply(s) | General build |
+| — | Breadboard, jumper wires, 10kΩ resistor (for DHT11 pull-up if not built into your module), 5V power supply(s) | General build |
 
 ---
 
@@ -79,9 +79,9 @@ Pins are chosen to avoid the ESP32's boot-strapping pins (0, 2, 12, 15), which c
                               ┌───────────────────────────┐
                               │        ESP32 DevKit         │
                               │                             │
-     DHT22 ── VCC ───────────►│ 3V3                         │
-     DHT22 ── DATA ──────────►│ GPIO4                       │
-     DHT22 ── GND ───────────►│ GND                         │
+     DHT11 ── VCC ───────────►│ 3V3                         │
+     DHT11 ── DATA ──────────►│ GPIO4                       │
+     DHT11 ── GND ───────────►│ GND                         │
                               │                             │
      MQ-5  ── VCC ───────────►│ 5V (VIN)                    │
      MQ-5  ── AOUT ──────────►│ GPIO34 (ADC1, input-only)   │
@@ -104,7 +104,7 @@ Pin table:
 
 | Component | Pin | ESP32 Pin | Notes |
 |---|---|---|---|
-| DHT22 | DATA | GPIO 4 | Add a 10kΩ pull-up resistor between DATA and 3.3V if your module doesn't already include one |
+| DHT11 | DATA | GPIO 4 | Add a 10kΩ pull-up resistor between DATA and 3.3V if your module doesn't already include one |
 | MQ-5 | AOUT | GPIO 34 | Input-only ADC1 pin — fine for `analogRead`. MQ-5 modules run on 5V; use one with an onboard comparator/divider so AOUT stays within 0–3.3V, or add your own voltage divider |
 | HX711 | DT | GPIO 16 | |
 | HX711 | SCK | GPIO 17 | |
@@ -113,9 +113,9 @@ Pin table:
 | LCD1602 (I2C backpack) | SCL | GPIO 22 | Default ESP32 I2C bus |
 
 Power notes:
-- DHT22, MQ-5, and the LCD's I2C backpack typically run on 5V (from the ESP32's `VIN` pin, itself powered from USB or an external 5V supply); their signal lines are fine with the ESP32's 3.3V logic.
+- DHT11, MQ-5, and the LCD's I2C backpack typically run on 5V (from the ESP32's `VIN` pin, itself powered from USB or an external 5V supply); their signal lines are fine with the ESP32's 3.3V logic.
 - HX711 breakout boards run on 3.3–5V depending on the model — check yours.
-- **All grounds must be tied together** (ESP32, DHT22, MQ-5, HX711, LCD).
+- **All grounds must be tied together** (ESP32, DHT11, MQ-5, HX711, LCD).
 - Find your LCD's I2C address if unsure by running an "I2C scanner" sketch (search "ESP32 I2C scanner" — a few lines of code that print any address found on the bus). Common values are `0x27` and `0x3F`; set it in `firmware/esp32-sensor-node/config.h` as `LCD_I2C_ADDRESS`.
 - Before first boot, make sure nothing is resting on the load cell — the firmware tares (zeroes) the scale automatically on startup.
 

@@ -1,7 +1,7 @@
 /*
   Smart Food Monitoring - Sensor Node (ESP32 Dev Board)
 
-  Reads DHT22 (temp/humidity), MQ-5 (gas/smoke), HX711 + load cell (weight),
+  Reads DHT11 (temp/humidity), MQ-5 (gas/smoke), HX711 + load cell (weight),
   shows a rotating readout on a 16x2 I2C LCD, and POSTs a JSON reading to the
   server on an interval.
 
@@ -24,7 +24,7 @@
 
 // ---- Pin assignments (see docs/wiring.md) ----
 #define DHT_PIN 4
-#define DHT_TYPE DHT22
+#define DHT_TYPE DHT11
 #define MQ5_PIN 34
 #define HX711_DT_PIN 16
 #define HX711_SCK_PIN 17
