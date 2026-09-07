@@ -135,10 +135,7 @@ void postReading() {
     return;
   }
 
-  HTTPClient http;
   String url = String("http://") + SERVER_HOST + ":" + SERVER_PORT + "/api/sensors";
-  http.begin(url);
-  http.addHeader("Content-Type", "application/json");
 
   String body = "{";
   body += "\"temperature\":" + String(isnan(lastTemperature) ? 0 : lastTemperature, 2) + ",";
@@ -147,9 +144,23 @@ void postReading() {
   body += "\"weight_g\":" + String(lastWeightG, 2);
   body += "}";
 
-  int status = http.POST(body);
-  Serial.printf("POST /api/sensors -> %d\n", status);
-  http.end();
+  for (int attempt = 1; attempt <= 2; attempt++) {
+    HTTPClient http;
+    http.begin(url);
+    http.addHeader("Content-Type", "application/json");
+    http.setTimeout(5000);
+
+    int status = http.POST(body);
+    if (status > 0) {
+      Serial.printf("POST /api/sensors -> %d\n", status);
+      http.end();
+      return;
+    }
+
+    Serial.printf("POST /api/sensors failed (attempt %d): %s\n", attempt, http.errorToString(status).c_str());
+    http.end();
+    if (attempt == 1) delay(1000);
+  }
 }
 
 void setup() {

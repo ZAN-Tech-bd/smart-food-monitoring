@@ -18,12 +18,28 @@ module.exports = function sensorsRouter(io) {
       return res.status(400).json({ error: 'temperature, humidity, gas_raw, and weight_g are all required numbers' });
     }
 
-    const info = insertReading.run({
-      temperature: Number(temperature),
-      humidity: Number(humidity),
-      gas_raw: Number(gas_raw),
-      weight_g: Number(weight_g),
-    });
+    const t = Number(temperature);
+    const h = Number(humidity);
+    const g = Number(gas_raw);
+    const w = Number(weight_g);
+
+    // Sane physical bounds — catches things like a DHT sensor misread (e.g. a DHT11
+    // decoded with the DHT22 byte layout inflates every reading by ~25.6x) before
+    // it ever reaches the database or the dashboard.
+    if (t < -40 || t > 125) {
+      return res.status(400).json({ error: 'temperature out of expected range (-40 to 125 C)' });
+    }
+    if (h < 0 || h > 100) {
+      return res.status(400).json({ error: 'humidity out of expected range (0-100%)' });
+    }
+    if (g < 0 || g > 4095) {
+      return res.status(400).json({ error: 'gas_raw out of expected ADC range (0-4095)' });
+    }
+    if (w < -1000 || w > 1000000) {
+      return res.status(400).json({ error: 'weight_g out of expected range' });
+    }
+
+    const info = insertReading.run({ temperature: t, humidity: h, gas_raw: g, weight_g: w });
 
     const reading = db.prepare('SELECT * FROM sensor_readings WHERE id = ?').get(info.lastInsertRowid);
     io.emit('sensor:update', reading);
