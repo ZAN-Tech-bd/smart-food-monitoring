@@ -37,7 +37,10 @@
 #define HREF_GPIO_NUM  23
 #define PCLK_GPIO_NUM  22
 
+#define WIFI_STATUS_INTERVAL_MS 5000
+
 unsigned long lastCaptureMs = 0;
+unsigned long lastWifiStatusMs = 0;
 
 void connectWiFi() {
   WiFi.mode(WIFI_STA);
@@ -54,6 +57,16 @@ void connectWiFi() {
     Serial.println(WiFi.localIP());
   } else {
     Serial.println("WiFi connect timed out, will retry in loop().");
+  }
+}
+
+void printWifiStatus() {
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("WiFi: Connected (IP ");
+    Serial.print(WiFi.localIP());
+    Serial.println(")");
+  } else {
+    Serial.println("WiFi: Disconnected");
   }
 }
 
@@ -172,6 +185,12 @@ void loop() {
   }
 
   unsigned long now = millis();
+
+  if (now - lastWifiStatusMs >= WIFI_STATUS_INTERVAL_MS) {
+    lastWifiStatusMs = now;
+    printWifiStatus();
+  }
+
   if (now - lastCaptureMs >= CAPTURE_INTERVAL_MS) {
     lastCaptureMs = now;
     captureAndSend();

@@ -33,8 +33,11 @@ DHT dht(DHT_PIN, DHT_TYPE);
 HX711 scale;
 LiquidCrystal_I2C lcd(LCD_I2C_ADDRESS, 16, 2);
 
+#define WIFI_STATUS_INTERVAL_MS 5000
+
 unsigned long lastSensorReadMs = 0;
 unsigned long lastServerPostMs = 0;
+unsigned long lastWifiStatusMs = 0;
 uint8_t lcdScreen = 0;
 
 float lastTemperature = NAN;
@@ -57,6 +60,16 @@ void connectWiFi() {
     Serial.println(WiFi.localIP());
   } else {
     Serial.println("WiFi connect timed out, will retry in loop().");
+  }
+}
+
+void printWifiStatus() {
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("WiFi: Connected (IP ");
+    Serial.print(WiFi.localIP());
+    Serial.println(")");
+  } else {
+    Serial.println("WiFi: Disconnected");
   }
 }
 
@@ -167,6 +180,11 @@ void loop() {
   }
 
   unsigned long now = millis();
+
+  if (now - lastWifiStatusMs >= WIFI_STATUS_INTERVAL_MS) {
+    lastWifiStatusMs = now;
+    printWifiStatus();
+  }
 
   if (now - lastSensorReadMs >= SENSOR_READ_INTERVAL_MS) {
     lastSensorReadMs = now;
