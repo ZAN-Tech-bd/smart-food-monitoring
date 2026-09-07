@@ -1,6 +1,6 @@
 # Smart Food Monitoring
 
-An ESP32-based food storage monitor. A sensor node tracks temperature, humidity, gas/smoke, and weight and shows them on an LCD; a second board (ESP32-CAM) photographs the food every 5 minutes; a local Node.js server logs everything to SQLite, sends each photo to Google Gemini (along with the latest sensor readings) for a freshness/spoilage assessment, and shows it all live on a web dashboard.
+An ESP32-based food storage monitor. A sensor node tracks temperature, humidity, gas/smoke, and weight and shows them on an LCD; a second board (ESP32-CAM) photographs the food periodically; a local Node.js server logs everything to SQLite, sends each photo to Google Gemini (along with the latest sensor readings) for a freshness/spoilage assessment, and shows it all live on a web dashboard.
 
 This README is self-contained: follow it top to bottom and you can build the whole thing from this repo alone — no prior ESP32 or Node experience assumed.
 
@@ -16,10 +16,11 @@ This README is self-contained: follow it top to bottom and you can build the who
 6. [Firmware: flashing the camera node](#firmware-flashing-the-camera-node)
 7. [Server: install and run](#server-install-and-run)
 8. [Getting a Gemini API key](#getting-a-gemini-api-key)
-9. [API reference](#api-reference)
-10. [Dashboard](#dashboard)
-11. [Project structure](#project-structure)
-12. [Troubleshooting](#troubleshooting)
+9. [Working within the Gemini free tier](#working-within-the-gemini-free-tier)
+10. [API reference](#api-reference)
+11. [Dashboard](#dashboard)
+12. [Project structure](#project-structure)
+13. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -33,7 +34,7 @@ This README is self-contained: follow it top to bottom and you can build the who
    16x2 I2C LCD                                     ┌────────────────────┐
                                                      │   Node.js server    │
                  WiFi (HTTP POST /api/images,        │  Express + SQLite   │
-                  multipart JPEG, every 5 min)       │  + Socket.IO        │
+                  multipart JPEG, every ~72 min)     │  + Socket.IO        │
  [ESP32-CAM] ───────────────────────────────────────▶│                    │
                                                      │  on new image:      │
                                                      │   → call Gemini API │
@@ -48,7 +49,7 @@ This README is self-contained: follow it top to bottom and you can build the who
 ```
 
 - The **sensor node** is a plain ESP32 dev board wired to all the sensors. It reads them continuously, rotates the readout across the 16x2 LCD, and POSTs a JSON reading to the server every 30 seconds.
-- The **camera node** is a separate ESP32-CAM (it has almost no free GPIO pins once the camera is wired up, so it does nothing else). It wakes up every 5 minutes, takes a JPEG, and uploads it to the server.
+- The **camera node** is a separate ESP32-CAM (it has almost no free GPIO pins once the camera is wired up, so it does nothing else). It wakes up periodically (every ~72 minutes by default — see [Working within the Gemini free tier](#working-within-the-gemini-free-tier)), takes a JPEG, and uploads it to the server.
 - The **server** stores every sensor reading and every image in SQLite. When an image arrives, it grabs the most recent sensor reading as a "snapshot" and sends the image + those readings to the **Gemini API**, asking for a `Fresh / Caution / Spoiled / Unclear` verdict with a short explanation. The result is saved back to the database.
 - The **dashboard** is a web page served by the same server. It loads the latest state on open and then updates live over a WebSocket (Socket.IO) as new readings and images come in — no manual refresh needed.
 
@@ -202,12 +203,12 @@ Do this once, before flashing either board.
    cd firmware/esp32-cam-node
    cp config.h.example config.h
    ```
-   Set `WIFI_SSID`, `WIFI_PASSWORD`, `SERVER_HOST`, `SERVER_PORT` the same way as above. `CAPTURE_INTERVAL_MS` defaults to 300000 (5 minutes).
+   Set `WIFI_SSID`, `WIFI_PASSWORD`, `SERVER_HOST`, `SERVER_PORT` the same way as above. `CAPTURE_INTERVAL_MS` defaults to 4320000 (72 minutes) — see [Working within the Gemini free tier](#working-within-the-gemini-free-tier) for why.
 3. Wire the FTDI adapter per [Circuit diagrams / wiring](#circuit-diagrams--wiring), including the GPIO0→GND flashing jumper.
 4. In Arduino IDE: **Tools → Board** → "AI Thinker ESP32-CAM", **Tools → Port** → the FTDI adapter's port.
 5. Reset the board to enter flashing mode, then click **Upload**.
 6. After upload finishes, remove the GPIO0→GND jumper and reset the board again.
-7. Open Serial Monitor at 115200 baud (optional, useful for debugging) — you'll see WiFi connect, then `POST /api/images -> 201` shortly after boot and every 5 minutes after that.
+7. Open Serial Monitor at 115200 baud (optional, useful for debugging) — you'll see WiFi connect, then `POST /api/images -> 201` shortly after boot and every `CAPTURE_INTERVAL_MS` after that.
 
 ---
 
@@ -226,8 +227,12 @@ Edit `server/.env`:
 | Variable | Description |
 |---|---|
 | `PORT` | Port the server listens on (default `3000`) |
-| `GEMINI_API_KEY` | Your Gemini API key — see [Getting a Gemini API key](#getting-a-gemini-api-key). Leave blank to run everything except AI analysis (images are still stored; the verdict will just show "Unknown") |
-| `GEMINI_MODEL` | Gemini model to use (default `gemini-2.0-flash`) |
+| `GEMINI_API_KEY` | Your Gemini API key — see [Getting a Gemini API key](#getting-a-gemini-api-key). Leave blank to run everything except image AI analysis (images are still stored; the verdict will just show "Unknown") |
+| `GEMINI_MODEL` | Gemini model to use for image analysis (default `gemini-3.6-flash`) |
+| `GEMINI_DAILY_LIMIT` | Daily cap on Gemini image-analysis calls, see [Working within the Gemini free tier](#working-within-the-gemini-free-tier) |
+| `GROQ_API_KEY` | Your Groq API key (free at [console.groq.com/keys](https://console.groq.com/keys)) — used for frequent sensor-only checks. Leave blank to skip those (image analysis still works independently) |
+| `GROQ_MODEL` | Groq model to use for sensor-only checks (default `openai/gpt-oss-20b`) |
+| `AI_STATUS_INTERVAL_MS` | How often to run a sensor-only check via Groq (default `60000` = 1 minute) |
 | `GAS_WARNING_THRESHOLD` / `GAS_DANGER_THRESHOLD` | Should match the values in `firmware/esp32-sensor-node/config.h` so the dashboard's gas badge agrees with the LCD |
 
 Run the server:
@@ -262,6 +267,34 @@ For development, `npm run dev` restarts the server automatically on file changes
 4. Restart the server (`npm run start`) after adding or changing the key.
 
 Without a key set, the server still runs and stores everything normally — the Gemini step just returns a verdict of `"Unknown"` with an explanatory note instead of erroring out.
+
+## Getting a Groq API key
+
+1. Go to [console.groq.com/keys](https://console.groq.com/keys) and sign in.
+2. Click **Create API Key**.
+3. Copy the key into `server/.env` as `GROQ_API_KEY=...`.
+4. Restart the server after adding or changing the key.
+
+Without a key set, sensor-only checks return `"Unknown"` the same way Gemini does when unconfigured — image analysis is unaffected either way, since the two run independently.
+
+---
+
+## Working within the Gemini free tier
+
+Google's free tier for `gemini-3.6-flash` caps out at **20 requests per day** (confirmed from a live `429` response — this is separate from, and much stricter than, its per-minute rate limit). That's tight for continuous monitoring, so the two AI features here use two different providers, split by what actually needs vision:
+
+- **Image analysis** (identifying the food + assessing its visual condition) needs a multimodal model, so it stays on **Gemini**, gated by that 20/day quota.
+- **Sensor-only checks** (a quick Good/Caution/Not Good read on temperature/humidity/gas/weight alone, used to fill the gaps between photos) are text-only, so they run on **Groq** instead — free at [console.groq.com/keys](https://console.groq.com/keys), with a much higher daily limit — leaving Gemini's scarce quota entirely for photos instead of splitting it between both features.
+
+**Automatic fallback**: if a photo's Gemini analysis comes back `"Unknown"` for any reason (no API key, daily quota exhausted, a real API error), the server automatically falls back to a Groq sensor-only read for that same image event instead of leaving it blank. The notes are prefixed `(Photo not analyzed - Gemini unavailable)` and `food_name` stays empty, since Groq's free-tier models here are text-only and genuinely can't see the photo — this is an honest sensor-based substitute, not a real look at the image.
+
+Three things keep this within budget:
+
+1. **The camera's capture interval is sized to the quota.** `CAPTURE_INTERVAL_MS` defaults to 4320000 (72 minutes), landing roughly 20 photo analyses evenly across a full day — instead of, say, capturing every 5 minutes and exhausting the day's quota within the first couple of hours, leaving the rest of the day with no image-based feedback at all.
+2. **The sensor-only check runs often** (`AI_STATUS_INTERVAL_MS`, default 60000 = 1 minute) since it's on Groq's separate, far more generous quota — so the dashboard's AI Status panel stays fresh even between photos.
+3. **A local daily budget guard** ([`services/geminiBudget.js`](server/src/services/geminiBudget.js)) tracks Gemini calls itself and stops making requests once `GEMINI_DAILY_LIMIT` (`.env`, default `20`) is reached, rather than repeatedly hitting the API and logging `429` errors. Once exhausted, image verdicts come back as `"Unknown"` with a note saying the quota's reached, and the dashboard shows a running `"X/20 AI checks used today"` counter.
+
+If your Gemini account has a different quota (a paid plan, a different model, or Google changes the free tier), update `GEMINI_DAILY_LIMIT` in `.env` and `CAPTURE_INTERVAL_MS` together — e.g. for a 1000/day quota you could drop `CAPTURE_INTERVAL_MS` down to something like 5 minutes again (`24h / 1000 ≈ 86s` minimum spacing, so 5 minutes leaves plenty of headroom). If Groq's model lineup changes and `GROQ_MODEL` starts 404ing, check currently available models for your key with `client.models.list()` (see `services/groq.js`) rather than guessing a name.
 
 ---
 
@@ -301,7 +334,7 @@ Returns up to `limit` (max 500, default 50) recent readings, oldest first — us
 
 ### `POST /api/images`
 
-Called by the **camera node** every 5 minutes. Multipart form upload with a single field:
+Called by the **camera node** on its configured interval (`CAPTURE_INTERVAL_MS`, default ~72 minutes). Multipart form upload with a single field:
 
 | Field | Type | Description |
 |---|---|---|
@@ -386,7 +419,7 @@ smart-food-monitoring/
       mq5_calibration/
         mq5_calibration.ino        # standalone sketch to find GAS_WARNING_THRESHOLD / GAS_DANGER_THRESHOLD
     esp32-cam-node/
-      esp32-cam-node.ino        # captures + uploads a photo every 5 minutes
+      esp32-cam-node.ino        # captures + uploads a photo periodically
       config.h.example
   server/
     package.json
@@ -396,10 +429,13 @@ smart-food-monitoring/
       db.js                     # SQLite schema + connection
       routes/
         sensors.js               # /api/sensors endpoints
-        images.js                 # /api/images endpoints
-        dashboard.js               # /api/dashboard/summary
+        images.js                 # /api/images endpoints (Gemini image analysis)
+        status.js                  # /api/status endpoints + the Groq sensor-only check timer
+        dashboard.js                 # /api/dashboard/summary
       services/
-        gemini.js                  # builds the prompt, calls Gemini, parses the verdict
+        gemini.js                  # builds the image-analysis prompt, calls Gemini, parses the verdict
+        geminiBudget.js              # daily call budget guard for Gemini (see "Working within the Gemini free tier")
+        groq.js                      # sensor-only Good/Caution/Not Good check via Groq
       public/                    # dashboard CSS/JS
       views/
         dashboard.ejs             # dashboard HTML template
@@ -424,6 +460,7 @@ smart-food-monitoring/
 | AI screen shows "Fetch failed" | The server is unreachable at `SERVER_HOST:SERVER_PORT` from the sensor node, or it's not running — same checks as the sensor POST failures above |
 | Weight reading is wildly wrong | Re-run the calibration steps in [Flashing the sensor node](#firmware-flashing-the-sensor-node); make sure the scale was empty at boot (tare happens on startup) |
 | Gas reading always low/high, or stuck at 4095 | Run `firmware/esp32-sensor-node/mq5_calibration/mq5_calibration.ino` — it prints a live baseline and actively flags a reading stuck at the ADC max as a wiring/power issue (module output exceeding 3.3V, a short, or a bad pin) rather than something to threshold around |
+| Server logs repeated `429 Too Many Requests` from Gemini | You've hit your account's daily quota — see [Working within the Gemini free tier](#working-within-the-gemini-free-tier). This should self-heal once `GEMINI_DAILY_LIMIT` is set correctly in `.env`: the server stops calling the API once it's reached, instead of retrying and re-logging the error |
 | ESP32-CAM won't flash / upload fails | Make sure GPIO0 is tied to GND and the board was reset right before clicking Upload; some FTDI adapters need to be set to 5V, others 3.3V — check your CAM board's specs; try a slower upload speed in Tools if it fails repeatedly |
 | Camera image never appears on dashboard | Check the CAM node's Serial Monitor for the `POST /api/images` status code; confirm the server is reachable at `SERVER_HOST:SERVER_PORT` from the CAM's network |
 | Dashboard shows verdict "Unknown" with a GEMINI_API_KEY message | You haven't set `GEMINI_API_KEY` in `server/.env` yet, or it's invalid — see [Getting a Gemini API key](#getting-a-gemini-api-key), then restart the server |

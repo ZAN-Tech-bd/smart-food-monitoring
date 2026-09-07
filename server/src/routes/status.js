@@ -1,11 +1,12 @@
 const express = require('express');
 const db = require('../db');
-const { analyzeSensorsOnly } = require('../services/gemini');
+const { analyzeSensorsOnly } = require('../services/groq');
+const geminiBudget = require('../services/geminiBudget');
 
-// How long a fresh image-based verdict "covers" before a sensor-only check
-// is allowed to run again. Keeps this from calling Gemini every second along
-// with the sensor POSTs - it only fills the gap between photos.
-const STATUS_CHECK_INTERVAL_MS = Number(process.env.AI_STATUS_INTERVAL_MS) || 300000;
+// Sensor-only checks run on Groq (generous free daily limit, text-only - no
+// vision needed for this), completely separate from Gemini's tight image
+// analysis quota, so this can run frequently.
+const STATUS_CHECK_INTERVAL_MS = Number(process.env.AI_STATUS_INTERVAL_MS) || 60000;
 
 module.exports = function statusRouter(io) {
   const router = express.Router();
@@ -50,21 +51,13 @@ module.exports = function statusRouter(io) {
     };
   }
 
-  // Runs on a timer from index.js. Only calls Gemini with sensor data when
-  // there's no fresh image-based verdict already covering this window, and
-  // never throws - a failed check just gets logged and skipped.
+  // Runs on a timer from index.js. Uses Groq (see services/groq.js), so it
+  // doesn't compete with Gemini's image-analysis budget - never throws, a
+  // failed check just gets logged and skipped.
   async function runSensorOnlyCheck() {
     try {
       const latestReading = getLatestReading.get();
       if (!latestReading) return; // no sensor data yet, nothing to check
-
-      const latestImage = getLatestImage.get();
-      const imageAgeMs = latestImage
-        ? Date.now() - new Date(`${latestImage.created_at}Z`).getTime()
-        : Infinity;
-      if (imageAgeMs < STATUS_CHECK_INTERVAL_MS) {
-        return; // a recent photo-based verdict already covers this window
-      }
 
       const { verdict, notes } = await analyzeSensorsOnly(latestReading);
       const info = insertAiStatus.run({
@@ -77,7 +70,7 @@ module.exports = function statusRouter(io) {
       });
 
       const row = getAiStatusById.get(info.lastInsertRowid);
-      io.emit('status:update', { source: 'sensor', ...row });
+      io.emit('status:update', { source: 'sensor', ...row, budget: geminiBudget.getStatus() });
     } catch (err) {
       console.error('Sensor-only AI status check failed:', err);
     }
@@ -87,8 +80,13 @@ module.exports = function statusRouter(io) {
     res.json(getCombinedStatus());
   });
 
+  router.get('/budget', (req, res) => {
+    res.json(geminiBudget.getStatus());
+  });
+
   router.getCombinedStatus = getCombinedStatus;
   router.runSensorOnlyCheck = runSensorOnlyCheck;
+  router.getBudgetStatus = geminiBudget.getStatus;
 
   return router;
 };

@@ -94,6 +94,11 @@ function renderImage(image) {
   }
 }
 
+function renderBudget(budget) {
+  if (!budget) return;
+  document.getElementById('ai-budget').textContent = `${budget.used}/${budget.limit} AI checks used today`;
+}
+
 function renderStatus(status) {
   if (!status) return;
   const badge = document.getElementById('status-badge');
@@ -106,6 +111,7 @@ function renderStatus(status) {
   notes.textContent = status.notes || '';
   source.textContent = status.source === 'image' ? 'from latest photo' : 'from sensor data (no recent photo)';
   timestamp.textContent = status.created_at ? formatTime(status.created_at) : '';
+  if (status.budget) renderBudget(status.budget);
 }
 
 function galleryItemMarkup(image) {
@@ -200,6 +206,7 @@ async function loadSummary() {
   }
   renderHistory(data.history);
   renderStatus(data.currentStatus);
+  renderBudget(data.aiBudget);
 }
 
 socket.on('sensor:update', (reading) => {
@@ -216,7 +223,7 @@ socket.on('image:analyzed', (image) => {
   // Only update the Latest Capture panel if a newer image hasn't already replaced it.
   if (image.id === latestImageId) renderImage(image);
   if (currentImagePage === 1) loadImagePage(1);
-  renderStatus({ source: 'image', verdict: image.gemini_verdict, notes: image.gemini_notes, created_at: image.created_at });
+  renderStatus({ source: 'image', verdict: image.gemini_verdict, notes: image.gemini_notes, created_at: image.created_at, budget: image.budget });
 });
 
 socket.on('status:update', (status) => {

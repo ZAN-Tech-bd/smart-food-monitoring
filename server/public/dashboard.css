@@ -156,6 +156,8 @@ main {
 
 .status-body { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .status-body p { margin: 0; line-height: 1.5; color: var(--text); flex: 1; min-width: 160px; }
+.status-footer { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.status-footer .muted { font-size: 0.72rem; }
 
 /* ---------- Latest capture ---------- */
 

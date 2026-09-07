@@ -1,8 +1,19 @@
 const fs = require('fs');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const budget = require('./geminiBudget');
 
 const apiKey = process.env.GEMINI_API_KEY;
 const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+
+function budgetExhaustedResult() {
+  const { used, limit } = budget.getStatus();
+  return {
+    verdict: 'Unknown',
+    notes: `Daily Gemini quota reached (${used}/${limit} used) - will resume analyzing after it resets.`,
+    food: null,
+    raw: null,
+  };
+}
 
 let client = null;
 function getClient() {
@@ -88,6 +99,9 @@ async function analyzeImage(imagePath, sensorSnapshot) {
   if (!genAI) {
     return { verdict: 'Unknown', notes: 'GEMINI_API_KEY is not configured on the server.', food: null, raw: null };
   }
+  if (!budget.tryConsume()) {
+    return budgetExhaustedResult();
+  }
 
   try {
     const model = genAI.getGenerativeModel({ model: modelName });
@@ -115,7 +129,10 @@ async function analyzeImage(imagePath, sensorSnapshot) {
 async function analyzeSensorsOnly(sensorSnapshot) {
   const genAI = getClient();
   if (!genAI) {
-    return { verdict: 'Unknown', notes: 'GEMINI_API_KEY is not configured on the server.', raw: null };
+    return { verdict: 'Unknown', notes: 'GEMINI_API_KEY is not configured on the server.', food: null, raw: null };
+  }
+  if (!budget.tryConsume()) {
+    return budgetExhaustedResult();
   }
 
   try {

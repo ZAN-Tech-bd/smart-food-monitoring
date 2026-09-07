@@ -7,5 +7,10 @@
 #define SERVER_HOST "192.168.1.50"
 #define SERVER_PORT 3000
 
-// How often to capture + upload a photo (ms). 5 minutes = 300000.
-#define CAPTURE_INTERVAL_MS 300000
+// How often to capture + upload a photo (ms). Default 4320000 = 72 minutes,
+// chosen so ~20 photos/day matches the Gemini free tier's daily quota for
+// gemini-3.6-flash - spreads AI feedback evenly across the day instead of
+// burning through the quota in the first couple hours. Adjust to match
+// GEMINI_DAILY_LIMIT in server/.env if your quota differs (24h / desired
+// calls-per-day, in ms).
+#define CAPTURE_INTERVAL_MS 4320000

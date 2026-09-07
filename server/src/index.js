@@ -22,13 +22,12 @@ const statusRouter = require('./routes/status')(io);
 
 app.use('/api/sensors', require('./routes/sensors')(io));
 app.use('/api/images', require('./routes/images')(io));
-app.use('/api/dashboard', require('./routes/dashboard')(statusRouter.getCombinedStatus));
+app.use('/api/dashboard', require('./routes/dashboard')(statusRouter.getCombinedStatus, statusRouter.getBudgetStatus));
 app.use('/api/status', statusRouter);
 
-// Fills the gap between camera captures: periodically asks Gemini for a
-// simple Good/Not Good read on sensor data alone, but only when there's no
-// recent photo-based verdict already covering that window (see status.js).
-const AI_STATUS_INTERVAL_MS = Number(process.env.AI_STATUS_INTERVAL_MS) || 300000;
+// Frequent sensor-only Good/Not Good pulse via Groq (see services/groq.js) -
+// separate from Gemini's image-analysis quota, so this can run often.
+const AI_STATUS_INTERVAL_MS = Number(process.env.AI_STATUS_INTERVAL_MS) || 60000;
 // Also run once shortly after boot so the dashboard doesn't sit on "Waiting"
 // for up to a full interval every time the server restarts.
 setTimeout(() => statusRouter.runSensorOnlyCheck(), 10000);

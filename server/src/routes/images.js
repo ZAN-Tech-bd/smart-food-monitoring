@@ -4,6 +4,8 @@ const fs = require('fs');
 const multer = require('multer');
 const db = require('../db');
 const { analyzeImage } = require('../services/gemini');
+const geminiBudget = require('../services/geminiBudget');
+const { analyzeSensorsOnly } = require('../services/groq');
 
 const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
 fs.mkdirSync(uploadsDir, { recursive: true });
@@ -53,10 +55,25 @@ module.exports = function imagesRouter(io) {
     // Analyze asynchronously so the ESP32-CAM upload isn't held open waiting on Gemini.
     const absolutePath = path.join(uploadsDir, req.file.filename);
     analyzeImage(absolutePath, snapshot)
-      .then(({ verdict, notes, raw, food }) => {
+      .then(async (result) => {
+        let { verdict, notes, raw, food } = result;
+
+        // Gemini couldn't produce a real verdict (no key, quota exhausted, API
+        // error, etc.) - fall back to a Groq sensor-only read for this same
+        // event rather than leaving it as a bare "Unknown". Groq's free-tier
+        // models here are text-only, so it can't actually see the photo -
+        // this is a sensor-based substitute, clearly labeled as one.
+        if (verdict === 'Unknown') {
+          const fallback = await analyzeSensorsOnly(snapshot);
+          verdict = fallback.verdict;
+          notes = `(Photo not analyzed - Gemini unavailable) ${fallback.notes}`;
+          food = null;
+          raw = fallback.raw;
+        }
+
         updateVerdict.run(verdict, notes, raw, food, info.lastInsertRowid);
         const updated = getImage.get(info.lastInsertRowid);
-        io.emit('image:analyzed', updated);
+        io.emit('image:analyzed', { ...updated, budget: geminiBudget.getStatus() });
       })
       .catch((err) => {
         console.error('Unexpected error analyzing image:', err);
