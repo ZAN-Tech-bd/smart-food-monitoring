@@ -45,4 +45,10 @@ db.exec(`
   );
 `);
 
+// Lightweight migration for databases created before the food_name column existed.
+const imageColumns = db.prepare('PRAGMA table_info(images)').all().map((c) => c.name);
+if (!imageColumns.includes('food_name')) {
+  db.exec('ALTER TABLE images ADD COLUMN food_name TEXT');
+}
+
 module.exports = db;

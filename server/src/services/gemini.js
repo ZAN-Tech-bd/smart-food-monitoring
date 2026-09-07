@@ -21,10 +21,23 @@ Latest sensor readings at the time this photo was taken:
 - Gas/smoke sensor (raw analog, higher = more gas detected): ${gas_raw ?? 'unknown'}
 - Weight on the load cell: ${weight_g ?? 'unknown'} g
 
-Look at the image for visible signs of spoilage (mold, discoloration, wilting, liquid/mush, pests) and combine that with the sensor readings.
+Identify the food item visible in the photo, and look for visible signs of spoilage (mold, discoloration, wilting, liquid/mush, pests).
+
+Your verdict must weigh BOTH sources of evidence together, not just one:
+- The visual condition of the food in the photo.
+- The sensor readings above (e.g. a food that looks fine visually should still be marked down if temperature/gas readings suggest a real risk, and a food with early visual aging should be marked down further if conditions are also poor).
+Your notes should mention whichever of the two (or both) actually drove the verdict.
 
 Respond with ONLY a compact JSON object, no markdown fences, no extra text, in exactly this shape:
-{"verdict": "Fresh" | "Caution" | "Spoiled" | "Unclear", "notes": "one or two short sentences explaining why"}`;
+{"food": "short name of the food item, or \\"Unknown\\" if none is identifiable", "verdict": "Fresh" | "Good" | "Caution" | "Spoiling" | "Spoiled" | "Unclear", "notes": "one or two short sentences explaining why"}
+
+Verdict guide:
+- Fresh: looks newly stored, no signs of aging at all
+- Good: still perfectly fine to eat, nothing concerning
+- Caution: early signs of aging, best consumed soon
+- Spoiling: visible spoilage starting (soft spots, discoloration, early mold)
+- Spoiled: clearly spoiled or unsafe to eat
+- Unclear: can't make a reliable call from the image (bad lighting, no food visible, obstructed view)`;
 }
 
 function buildSensorOnlyPrompt(sensorSnapshot) {
@@ -35,10 +48,15 @@ function buildSensorOnlyPrompt(sensorSnapshot) {
 - Gas/smoke sensor (raw analog, higher = more gas detected): ${gas_raw ?? 'unknown'}
 - Weight on the load cell: ${weight_g ?? 'unknown'} g
 
-Judge whether these readings look like normal safe food storage conditions or not.
+Judge whether these readings look like normal, safe food storage conditions.
 
 Respond with ONLY a compact JSON object, no markdown fences, no extra text, in exactly this shape:
-{"verdict": "Good" | "Not Good", "notes": "one short sentence explaining why"}`;
+{"verdict": "Good" | "Caution" | "Not Good", "notes": "one short sentence explaining why"}
+
+Verdict guide:
+- Good: readings look like normal, safe storage conditions
+- Caution: one or more readings are borderline and worth watching
+- Not Good: readings indicate a real problem (e.g. high gas, unsafe temperature)`;
 }
 
 function parseResponseText(text) {
@@ -46,12 +64,17 @@ function parseResponseText(text) {
   try {
     const parsed = JSON.parse(trimmed);
     if (parsed && typeof parsed.verdict === 'string') {
-      return { verdict: parsed.verdict, notes: parsed.notes || '', raw: text };
+      return {
+        verdict: parsed.verdict,
+        notes: parsed.notes || '',
+        food: typeof parsed.food === 'string' ? parsed.food : null,
+        raw: text,
+      };
     }
   } catch (err) {
     // fall through to the Unknown case below
   }
-  return { verdict: 'Unknown', notes: text.slice(0, 500), raw: text };
+  return { verdict: 'Unknown', notes: text.slice(0, 500), food: null, raw: text };
 }
 
 /**
@@ -63,7 +86,7 @@ function parseResponseText(text) {
 async function analyzeImage(imagePath, sensorSnapshot) {
   const genAI = getClient();
   if (!genAI) {
-    return { verdict: 'Unknown', notes: 'GEMINI_API_KEY is not configured on the server.', raw: null };
+    return { verdict: 'Unknown', notes: 'GEMINI_API_KEY is not configured on the server.', food: null, raw: null };
   }
 
   try {
@@ -80,7 +103,7 @@ async function analyzeImage(imagePath, sensorSnapshot) {
     return parseResponseText(text);
   } catch (err) {
     console.error('Gemini analysis failed:', err.message);
-    return { verdict: 'Unknown', notes: `Analysis failed: ${err.message}`, raw: null };
+    return { verdict: 'Unknown', notes: `Analysis failed: ${err.message}`, food: null, raw: null };
   }
 }
 

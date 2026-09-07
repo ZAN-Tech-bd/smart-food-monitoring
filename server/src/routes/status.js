@@ -5,7 +5,7 @@ const { analyzeSensorsOnly } = require('../services/gemini');
 // How long a fresh image-based verdict "covers" before a sensor-only check
 // is allowed to run again. Keeps this from calling Gemini every second along
 // with the sensor POSTs - it only fills the gap between photos.
-const STATUS_CHECK_INTERVAL_MS = Number(process.env.AI_STATUS_INTERVAL_MS) || 120000;
+const STATUS_CHECK_INTERVAL_MS = Number(process.env.AI_STATUS_INTERVAL_MS) || 300000;
 
 module.exports = function statusRouter(io) {
   const router = express.Router();

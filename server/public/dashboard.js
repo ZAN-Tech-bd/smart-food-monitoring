@@ -36,7 +36,7 @@ function gasLabel(raw) {
 function verdictBadgeClass(verdict) {
   if (verdict === 'Fresh' || verdict === 'Good') return 'ok';
   if (verdict === 'Caution') return 'warn';
-  if (verdict === 'Spoiled' || verdict === 'Not Good') return 'danger';
+  if (verdict === 'Spoiling' || verdict === 'Spoiled' || verdict === 'Not Good') return 'danger';
   return '';
 }
 function formatTime(createdAt) {
@@ -79,15 +79,18 @@ function renderImage(image) {
 
   const verdictBadge = document.getElementById('verdict-badge');
   const notes = document.getElementById('verdict-notes');
+  const foodTag = document.getElementById('food-name');
 
   if (!image.gemini_verdict) {
     verdictBadge.textContent = 'Analyzing…';
     verdictBadge.className = 'badge';
     notes.textContent = 'Waiting for Gemini feedback.';
+    foodTag.textContent = '';
   } else {
     verdictBadge.textContent = image.gemini_verdict;
     verdictBadge.className = `badge ${verdictBadgeClass(image.gemini_verdict)}`;
     notes.textContent = image.gemini_notes || '';
+    foodTag.textContent = image.food_name || '';
   }
 }
 
@@ -111,6 +114,7 @@ function galleryItemMarkup(image) {
     <img src="${image.filepath}" alt="capture" loading="lazy" />
     <div class="gallery-item-meta">
       <span class="badge ${verdictBadgeClass(image.gemini_verdict)}">${verdict}</span>
+      ${image.food_name ? `<span class="gallery-item-food">${image.food_name}</span>` : ''}
     </div>
     <div class="gallery-item-meta">
       <span class="gallery-item-time">${formatTime(image.created_at)}</span>

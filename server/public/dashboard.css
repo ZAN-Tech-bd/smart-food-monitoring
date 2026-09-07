@@ -173,6 +173,9 @@ main {
 .capture-details { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 10px; }
 .capture-details p { margin: 0; line-height: 1.5; color: var(--text); }
 
+.capture-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.food-name { font-size: 1.05rem; font-weight: 650; }
+
 .capture-snapshot {
   display: flex;
   flex-wrap: wrap;
@@ -231,6 +234,13 @@ main {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+}
+.gallery-item-food {
+  font-size: 0.7rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .gallery-item-time { font-size: 0.68rem; color: var(--muted); white-space: nowrap; }
 

@@ -23,7 +23,7 @@ module.exports = function imagesRouter(io) {
     VALUES (@filepath, @temperature, @humidity, @gas_raw, @weight_g)
   `);
   const updateVerdict = db.prepare(`
-    UPDATE images SET gemini_verdict = ?, gemini_notes = ?, gemini_raw = ? WHERE id = ?
+    UPDATE images SET gemini_verdict = ?, gemini_notes = ?, gemini_raw = ?, food_name = ? WHERE id = ?
   `);
   const getImage = db.prepare('SELECT * FROM images WHERE id = ?');
   const getImagesPage = db.prepare('SELECT * FROM images ORDER BY id DESC LIMIT ? OFFSET ?');
@@ -53,8 +53,8 @@ module.exports = function imagesRouter(io) {
     // Analyze asynchronously so the ESP32-CAM upload isn't held open waiting on Gemini.
     const absolutePath = path.join(uploadsDir, req.file.filename);
     analyzeImage(absolutePath, snapshot)
-      .then(({ verdict, notes, raw }) => {
-        updateVerdict.run(verdict, notes, raw, info.lastInsertRowid);
+      .then(({ verdict, notes, raw, food }) => {
+        updateVerdict.run(verdict, notes, raw, food, info.lastInsertRowid);
         const updated = getImage.get(info.lastInsertRowid);
         io.emit('image:analyzed', updated);
       })
@@ -74,7 +74,8 @@ module.exports = function imagesRouter(io) {
         return res.send('No data\nNo images captured yet');
       }
       const verdict = image.gemini_verdict || 'Analyzing';
-      const notes = image.gemini_notes || 'Waiting for AI feedback';
+      const baseNotes = image.gemini_notes || 'Waiting for AI feedback';
+      const notes = image.food_name ? `${image.food_name}: ${baseNotes}` : baseNotes;
       return res.send(`${verdict}\n${notes}`);
     }
 
