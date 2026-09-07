@@ -64,6 +64,7 @@ This README is self-contained: follow it top to bottom and you can build the who
 | 1 | MQ-5 smoke/LPG gas sensor module | Gas/smoke detection |
 | 1 | DHT11 temperature/humidity sensor | Temperature + humidity |
 | 1 | 16x2 LCD with I2C backpack (PCF8574, address `0x27` or `0x3F`) | On-device readout |
+| 1 | Momentary push button | Toggles the LCD between sensor readings and the latest AI (Gemini) verdict |
 | 1 | Load cell (e.g. 1kg/5kg bar-type) + HX711 amplifier board | Weight of stored food |
 | — | Breadboard, jumper wires, 10kΩ resistor (for DHT11 pull-up if not built into your module), 5V power supply(s) | General build |
 
@@ -97,6 +98,9 @@ Pins are chosen to avoid the ESP32's boot-strapping pins (0, 2, 12, 15), which c
      LCD I2C ── SDA ─────────►│ GPIO21                      │
      LCD I2C ── SCL ─────────►│ GPIO22                      │
      LCD I2C ── GND ─────────►│ GND                         │
+                              │                             │
+     BUTTON ── one leg ──────►│ GPIO13                      │
+     BUTTON ── other leg ────►│ GND                         │
                               └───────────────────────────┘
 ```
 
@@ -111,11 +115,12 @@ Pin table:
 | HX711 | E+, E-, A+, A- | — | Wired to the load cell's 4 wires (usually red/black = E+/E-, white/green = A+/A-; check your load cell's datasheet, colors vary) |
 | LCD1602 (I2C backpack) | SDA | GPIO 21 | Default ESP32 I2C bus |
 | LCD1602 (I2C backpack) | SCL | GPIO 22 | Default ESP32 I2C bus |
+| Push button | one leg | GPIO 13 | The other leg goes straight to GND — no external resistor needed, the firmware uses the pin's internal pull-up |
 
 Power notes:
 - DHT11, MQ-5, and the LCD's I2C backpack typically run on 5V (from the ESP32's `VIN` pin, itself powered from USB or an external 5V supply); their signal lines are fine with the ESP32's 3.3V logic.
 - HX711 breakout boards run on 3.3–5V depending on the model — check yours.
-- **All grounds must be tied together** (ESP32, DHT11, MQ-5, HX711, LCD).
+- **All grounds must be tied together** (ESP32, DHT11, MQ-5, HX711, LCD, button).
 - Find your LCD's I2C address if unsure by running an "I2C scanner" sketch (search "ESP32 I2C scanner" — a few lines of code that print any address found on the bus). Common values are `0x27` and `0x3F`; set it in `firmware/esp32-sensor-node/config.h` as `LCD_I2C_ADDRESS`.
 - Before first boot, make sure nothing is resting on the load cell — the firmware tares (zeroes) the scale automatically on startup.
 
@@ -180,6 +185,8 @@ Do this once, before flashing either board.
 4. In Arduino IDE: **Tools → Board** → select your ESP32 dev board (e.g. "ESP32 Dev Module"), **Tools → Port** → select the board's serial port.
 5. Click **Upload**.
 6. Open **Tools → Serial Monitor** at 115200 baud. You should see WiFi connect, then periodic `POST /api/sensors -> 201` log lines (once the server is running — see below) and the LCD should start cycling through Temp/Humidity → Gas → Weight screens.
+
+**The push button** toggles the LCD to a second mode: it fetches the latest Gemini verdict + notes from the server and shows it (scrolling the notes line if it's longer than 16 characters), refreshing every 5 seconds while you're on that screen. Press it again to go back to the sensor screens.
 
 **Calibrating the load cell** (`HX711_CALIBRATION_FACTOR`): use the standalone `firmware/esp32-sensor-node/hx711_calibration/hx711_calibration.ino` sketch instead of guessing values in the main sketch. Upload it, follow the Serial Monitor prompts (tare with nothing on the scale, then type in the weight of a known reference object), and it prints the exact `HX711_CALIBRATION_FACTOR` to paste into `config.h`. Then re-flash the main `esp32-sensor-node.ino` sketch.
 
@@ -305,9 +312,26 @@ Example:
 curl -X POST http://localhost:3000/api/images -F "image=@photo.jpg"
 ```
 
-### `GET /api/images?limit=20`
+### `GET /api/images?page=1&limit=5`
 
-Returns up to `limit` (max 200, default 20) recent images with their sensor snapshot and Gemini verdict — used for the dashboard's image log.
+Paginated list of images, newest first, with their sensor snapshot and Gemini verdict — used for the dashboard's image log. `limit` maxes out at 50 (default 5).
+
+```json
+{ "items": [ /* up to `limit` images */ ], "page": 1, "limit": 5, "total": 12, "totalPages": 3 }
+```
+
+### `GET /api/images/latest`
+
+Returns the single most recent image row as JSON (or `null` if none yet).
+
+Add `?format=text` to get a plain two-line body instead of JSON — `<verdict>\n<notes>` — used by the **sensor node's push button** so the ESP32 doesn't need a JSON parser to show the AI verdict on the LCD:
+```bash
+curl "http://localhost:3000/api/images/latest?format=text"
+```
+```
+Fresh
+No visible spoilage; color and texture look normal.
+```
 
 ### `GET /api/dashboard/summary`
 
@@ -316,8 +340,7 @@ Returns everything needed to render the dashboard on initial page load in one ca
 {
   "latestReading": { "id": 1, "temperature": 22.5, "humidity": 55, "gas_raw": 900, "weight_g": 312.4, "created_at": "..." },
   "latestImage": { "id": 1, "filepath": "/uploads/....jpg", "gemini_verdict": "Fresh", "gemini_notes": "...", "..." },
-  "history": [ /* up to 50 recent readings */ ],
-  "recentImages": [ /* up to 12 recent images */ ],
+  "history": [ /* up to 300 recent readings, ~5 min at the default 1s post interval */ ],
   "thresholds": { "gasWarning": 1500, "gasDanger": 2800 }
 }
 ```
@@ -392,6 +415,9 @@ smart-food-monitoring/
 | ESP32 board won't connect to WiFi | Double-check `WIFI_SSID`/`WIFI_PASSWORD` in `config.h`; ESP32 only supports 2.4GHz networks, not 5GHz |
 | Sensor node's `POST /api/sensors` logs a non-201 status or times out | Confirm `SERVER_HOST`/`SERVER_PORT` in `config.h` match the PC's actual local IP and the server's `PORT`; make sure the PC's firewall allows inbound connections on that port; confirm the phone/ESP32 and PC are on the same WiFi network (not a guest network that isolates clients) |
 | LCD shows nothing / garbled characters | Wrong I2C address — run an I2C scanner sketch and update `LCD_I2C_ADDRESS`; check SDA/SCL wiring and that the LCD has power |
+| Button press does nothing / toggles randomly on its own | Confirm the button's other leg actually reaches GND (not floating) — the firmware relies on the internal pull-up, so a floating pin will read noise and flip modes on its own; check the wire to GPIO 13 isn't loose |
+| AI screen shows "No WiFi" | The board lost its WiFi connection — check `printWifiStatus()`'s periodic Serial log; the AI screen only fetches over WiFi, unlike the sensor screens which just show cached local readings |
+| AI screen shows "Fetch failed" | The server is unreachable at `SERVER_HOST:SERVER_PORT` from the sensor node, or it's not running — same checks as the sensor POST failures above |
 | Weight reading is wildly wrong | Re-run the calibration steps in [Flashing the sensor node](#firmware-flashing-the-sensor-node); make sure the scale was empty at boot (tare happens on startup) |
 | Gas reading always low/high | MQ-5 sensors need a short warm-up period after power-on and are sensitive to their specific module's onboard potentiometer/comparator setting; adjust `GAS_WARNING_THRESHOLD`/`GAS_DANGER_THRESHOLD` to your observed baseline |
 | ESP32-CAM won't flash / upload fails | Make sure GPIO0 is tied to GND and the board was reset right before clicking Upload; some FTDI adapters need to be set to 5V, others 3.3V — check your CAM board's specs; try a slower upload speed in Tools if it fails repeatedly |

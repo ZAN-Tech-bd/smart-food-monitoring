@@ -28,6 +28,7 @@ module.exports = function imagesRouter(io) {
   const getImage = db.prepare('SELECT * FROM images WHERE id = ?');
   const getImagesPage = db.prepare('SELECT * FROM images ORDER BY id DESC LIMIT ? OFFSET ?');
   const countImages = db.prepare('SELECT COUNT(*) AS count FROM images');
+  const getLatestImage = db.prepare('SELECT * FROM images ORDER BY id DESC LIMIT 1');
 
   router.post('/', upload.single('image'), (req, res) => {
     if (!req.file) {
@@ -60,6 +61,24 @@ module.exports = function imagesRouter(io) {
       .catch((err) => {
         console.error('Unexpected error analyzing image:', err);
       });
+  });
+
+  // ?format=text returns a plain two-line body (verdict, then notes) instead of JSON -
+  // used by the sensor node's LCD so it doesn't need a JSON parser on the device.
+  router.get('/latest', (req, res) => {
+    const image = getLatestImage.get();
+
+    if (req.query.format === 'text') {
+      res.type('text/plain');
+      if (!image) {
+        return res.send('No data\nNo images captured yet');
+      }
+      const verdict = image.gemini_verdict || 'Analyzing';
+      const notes = image.gemini_notes || 'Waiting for AI feedback';
+      return res.send(`${verdict}\n${notes}`);
+    }
+
+    res.json(image || null);
   });
 
   router.get('/', (req, res) => {

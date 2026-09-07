@@ -5,6 +5,12 @@
   shows a rotating readout on a 16x2 I2C LCD, and POSTs a JSON reading to the
   server on an interval.
 
+  A push button toggles the LCD between two modes:
+    - Sensor mode (default): rotates Temp/Humidity -> Gas -> Weight screens.
+    - AI mode: fetches the latest Gemini verdict + notes from the server and
+      shows it, scrolling the notes line if it's longer than 16 characters.
+  Press the button again to switch back to sensor mode.
+
   Required libraries (Arduino IDE Library Manager):
     - DHT sensor library (Adafruit) + Adafruit Unified Sensor
     - HX711 by Bogdan Necula (bogde/HX711)
@@ -28,6 +34,9 @@
 #define MQ5_PIN 34
 #define HX711_DT_PIN 16
 #define HX711_SCK_PIN 17
+// Momentary push button, other leg to GND. Uses the internal pull-up, so no
+// external resistor is needed - the pin reads LOW when pressed.
+#define BUTTON_PIN 13
 
 DHT dht(DHT_PIN, DHT_TYPE);
 HX711 scale;
@@ -37,17 +46,34 @@ LiquidCrystal_I2C lcd(LCD_I2C_ADDRESS, 16, 2);
 // LCD screens rotate on their own timer so they stay readable even though
 // sensors are sampled once a second for the live dashboard.
 #define LCD_ROTATE_INTERVAL_MS 2500
+// How fast the AI notes line scrolls when it's longer than 16 characters.
+#define LCD_SCROLL_INTERVAL_MS 400
+// How often to re-fetch the AI verdict while the button has AI mode selected.
+#define API_FETCH_INTERVAL_MS 5000
+#define BUTTON_DEBOUNCE_MS 50
 
 unsigned long lastSensorReadMs = 0;
 unsigned long lastServerPostMs = 0;
 unsigned long lastWifiStatusMs = 0;
 unsigned long lastLcdRotateMs = 0;
+unsigned long lastApiFetchMs = 0;
 uint8_t lcdScreen = 0;
 
 float lastTemperature = NAN;
 float lastHumidity = NAN;
 int lastGasRaw = 0;
 float lastWeightG = 0;
+
+enum DisplayMode { DISPLAY_SENSORS = 0, DISPLAY_AI = 1 };
+DisplayMode displayMode = DISPLAY_SENSORS;
+
+int lastButtonReading = HIGH;
+int buttonState = HIGH;
+unsigned long lastButtonDebounceMs = 0;
+
+String apiVerdict = "--";
+String apiNotes = "Press button to load AI feedback";
+uint16_t apiScrollOffset = 0;
 
 void connectWiFi() {
   WiFi.mode(WIFI_STA);
@@ -83,6 +109,69 @@ const char *gasLevelLabel(int raw) {
   return "Normal";
 }
 
+void fetchApiResponse() {
+  if (WiFi.status() != WL_CONNECTED) {
+    apiVerdict = "No WiFi";
+    apiNotes = "Cannot reach server";
+    return;
+  }
+
+  HTTPClient http;
+  String url = String("http://") + SERVER_HOST + ":" + SERVER_PORT + "/api/images/latest?format=text";
+  http.begin(url);
+  http.setTimeout(5000);
+
+  int status = http.GET();
+  if (status == 200) {
+    String body = http.getString();
+    int splitAt = body.indexOf('\n');
+    if (splitAt == -1) {
+      apiVerdict = body;
+      apiNotes = "";
+    } else {
+      apiVerdict = body.substring(0, splitAt);
+      apiNotes = body.substring(splitAt + 1);
+    }
+    apiVerdict.trim();
+    apiNotes.trim();
+  } else {
+    apiVerdict = "Fetch failed";
+    apiNotes = http.errorToString(status);
+  }
+  http.end();
+  apiScrollOffset = 0;
+}
+
+void toggleDisplayMode() {
+  displayMode = (displayMode == DISPLAY_SENSORS) ? DISPLAY_AI : DISPLAY_SENSORS;
+  lcdScreen = 0;
+  apiScrollOffset = 0;
+  lastLcdRotateMs = millis();
+
+  if (displayMode == DISPLAY_AI) {
+    fetchApiResponse();
+    lastApiFetchMs = millis();
+  }
+}
+
+void handleButton() {
+  int reading = digitalRead(BUTTON_PIN);
+
+  if (reading != lastButtonReading) {
+    lastButtonDebounceMs = millis();
+  }
+
+  if (millis() - lastButtonDebounceMs > BUTTON_DEBOUNCE_MS && reading != buttonState) {
+    buttonState = reading;
+    if (buttonState == LOW) {  // pressed (active-low with internal pull-up)
+      toggleDisplayMode();
+      updateLcd();
+    }
+  }
+
+  lastButtonReading = reading;
+}
+
 void readSensors() {
   float h = dht.readHumidity();
   float t = dht.readTemperature();
@@ -101,7 +190,7 @@ void readSensors() {
                 gasLevelLabel(lastGasRaw), lastWeightG);
 }
 
-void updateLcd() {
+void updateSensorScreen() {
   lcd.clear();
   switch (lcdScreen) {
     case 0:
@@ -131,6 +220,41 @@ void updateLcd() {
       break;
   }
   lcdScreen = (lcdScreen + 1) % 3;
+}
+
+void updateApiScreen() {
+  lcd.clear();
+
+  String line0 = "AI: " + apiVerdict;
+  if (line0.length() > 16) line0 = line0.substring(0, 16);
+  lcd.setCursor(0, 0);
+  lcd.print(line0);
+
+  String text = apiNotes.length() ? apiNotes : String("(no notes)");
+  lcd.setCursor(0, 1);
+
+  if (text.length() <= 16) {
+    lcd.print(text);
+    return;
+  }
+
+  // Scroll: pad with a gap so the wrap-around reads cleanly, then print a
+  // rolling 16-char window into it.
+  String padded = text + "    ";
+  String window;
+  for (int i = 0; i < 16; i++) {
+    window += padded[(apiScrollOffset + i) % padded.length()];
+  }
+  lcd.print(window);
+  apiScrollOffset++;
+}
+
+void updateLcd() {
+  if (displayMode == DISPLAY_AI) {
+    updateApiScreen();
+  } else {
+    updateSensorScreen();
+  }
 }
 
 void postReading() {
@@ -171,6 +295,8 @@ void setup() {
   Serial.begin(115200);
   delay(200);
 
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
   Wire.begin();
   lcd.init();
   lcd.backlight();
@@ -194,6 +320,8 @@ void loop() {
     connectWiFi();
   }
 
+  handleButton();
+
   unsigned long now = millis();
 
   if (now - lastWifiStatusMs >= WIFI_STATUS_INTERVAL_MS) {
@@ -206,9 +334,20 @@ void loop() {
     readSensors();
   }
 
-  if (now - lastLcdRotateMs >= LCD_ROTATE_INTERVAL_MS) {
-    lastLcdRotateMs = now;
-    updateLcd();
+  if (displayMode == DISPLAY_AI) {
+    if (now - lastLcdRotateMs >= LCD_SCROLL_INTERVAL_MS) {
+      lastLcdRotateMs = now;
+      updateLcd();
+    }
+    if (now - lastApiFetchMs >= API_FETCH_INTERVAL_MS) {
+      lastApiFetchMs = now;
+      fetchApiResponse();
+    }
+  } else {
+    if (now - lastLcdRotateMs >= LCD_ROTATE_INTERVAL_MS) {
+      lastLcdRotateMs = now;
+      updateLcd();
+    }
   }
 
   if (now - lastServerPostMs >= SERVER_POST_INTERVAL_MS) {
