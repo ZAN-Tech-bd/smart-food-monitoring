@@ -11,6 +11,11 @@
       shows it, scrolling the notes line if it's longer than 16 characters.
   Press the button again to switch back to sensor mode.
 
+  Boot order is WiFi-first: the board connects to WiFi/the server before
+  touching any sensor, and every sensor initializes with its own timeout so
+  a missing/faulty sensor can never block WiFi or hang the board - it just
+  reports 0 until it's connected.
+
   Required libraries (Arduino IDE Library Manager):
     - DHT sensor library (Adafruit) + Adafruit Unified Sensor
     - HX711 by Bogdan Necula (bogde/HX711)
@@ -161,9 +166,9 @@ void handleButton() {
 }
 
 int readGasRaw() {
-  // MQ-5's raw ADC value is noisy sample-to-sample (can swing +/-30-40%
-  // around the true level) - average a handful of quick samples so a single
-  // noise spike can't falsely trip the Warning/Danger threshold.
+  // MQ-5's raw ADC value is noisy sample-to-sample - average a handful of
+  // quick samples (analogRead never blocks) so a single noise spike can't
+  // falsely trip the Warning/Danger threshold.
   long sum = 0;
   const int samples = 10;
   for (int i = 0; i < samples; i++) {
@@ -174,15 +179,20 @@ int readGasRaw() {
 }
 
 void readSensors() {
+  // DHT library has its own internal timeout and returns NaN on failure -
+  // never blocks, so a disconnected/faulty DHT11 can't hang the board. Only
+  // overwrite the last good reading when this one actually succeeded.
   float h = dht.readHumidity();
   float t = dht.readTemperature();
-  if (!isnan(h)) lastHumidity = h;
-  if (!isnan(t)) lastTemperature = t;
+  if (!isnan(h)) lastHumidity = h + DHT_HUMIDITY_OFFSET;
+  if (!isnan(t)) lastTemperature = t + DHT_TEMP_OFFSET;
 
   lastGasRaw = readGasRaw();
 
+  // is_ready() is a quick non-blocking pin check - never call get_units()
+  // (which blocks waiting for data) unless it's already true.
   if (scale.is_ready()) {
-    lastWeightG = scale.get_units(2);
+    lastWeightG = scale.get_units(2) - HX711_WEIGHT_OFFSET;
     if (lastWeightG < 0) lastWeightG = 0;
   }
 
@@ -202,11 +212,11 @@ void updateSensorScreen() {
     case 0:
       lcd.setCursor(0, 0);
       lcd.print("Temp: ");
-      lcd.print(isnan(lastTemperature) ? -1 : lastTemperature, 1);
+      lcd.print(isnan(lastTemperature) ? 0 : lastTemperature, 1);
       lcd.print("C");
       lcd.setCursor(0, 1);
       lcd.print("Humidity: ");
-      lcd.print(isnan(lastHumidity) ? -1 : lastHumidity, 0);
+      lcd.print(isnan(lastHumidity) ? 0 : lastHumidity, 0);
       lcd.print("%");
       break;
     case 1:
@@ -300,25 +310,56 @@ void postReading() {
 void setup() {
   Serial.begin(115200);
   delay(200);
+  Serial.println("BOOT: Serial up");
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
+  Serial.println("BOOT: pins configured");
+
+  // WiFi/server connection comes first, before touching any sensor. That way
+  // the board is already online even if a sensor below is missing, slow, or
+  // hanging - no sensor gets to hold up WiFi.
+  connectWiFi();
+  Serial.println("BOOT: connectWiFi() returned");
+
+  // Every sensor init below is best-effort with its own timeout: if a given
+  // sensor doesn't respond in time, we move on immediately and that sensor
+  // just reports 0 (see readSensors()/postReading()) until it's connected -
+  // we never block waiting for every sensor to be present.
 
   Wire.begin();
+  Wire.setTimeOut(1000); // ESP32 core: abort a stuck I2C transaction instead of hanging forever
+  Serial.println("BOOT: Wire (I2C) started");
+
   lcd.init();
   lcd.backlight();
   lcd.setCursor(0, 0);
   lcd.print("Food Monitor");
   lcd.setCursor(0, 1);
   lcd.print("Starting...");
+  Serial.println("BOOT: LCD initialized");
 
   dht.begin();
+  Serial.println("BOOT: DHT started");
 
   scale.begin(HX711_DT_PIN, HX711_SCK_PIN);
   scale.set_scale(HX711_CALIBRATION_FACTOR);
-  scale.tare(); // Make sure the scale is empty when the board boots.
 
-  connectWiFi();
-  delay(500);
+  // HX711's tare()/read() has NO built-in timeout - if the module isn't
+  // wired/powered correctly it waits forever for a "data ready" signal that
+  // never comes. Wait for it ourselves with a timeout so a bad HX711
+  // connection can't hang the board; weight just stays 0 until it's ready.
+  unsigned long hxWaitStart = millis();
+  while (!scale.is_ready() && millis() - hxWaitStart < 2000) {
+    delay(10);
+  }
+  if (scale.is_ready()) {
+    scale.tare(); // Make sure the scale is empty when the board boots.
+    Serial.println("BOOT: HX711 tared");
+  } else {
+    Serial.println("BOOT: HX711 not responding within 2s - weight will read 0 until it's connected.");
+  }
+
+  Serial.println("BOOT: setup complete, entering loop()");
 }
 
 void loop() {

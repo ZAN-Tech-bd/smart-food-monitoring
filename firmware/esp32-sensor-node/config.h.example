@@ -32,5 +32,11 @@
 // that's expected, just use it as printed, minus sign included.
 #define HX711_CALIBRATION_FACTOR -397.80f
 
+// Extra correction subtracted from every weight reading, on top of the
+// boot-time tare(). If the empty scale doesn't read ~0 (tare landing
+// off-zero - can happen from temperature drift or mounting stress), set
+// this to whatever the empty-scale reading is to cancel it out.
+#define HX711_WEIGHT_OFFSET 0.0f
+
 // LCD I2C address - try 0x27 first, 0x3F is the other common default.
 #define LCD_I2C_ADDRESS 0x27
