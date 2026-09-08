@@ -18,10 +18,13 @@
 #define DHT_TEMP_OFFSET 0.0f
 #define DHT_HUMIDITY_OFFSET 0.0f
 
-// MQ-5 raw ADC thresholds (0-4095 on ESP32). Get these from
-// mq5_calibration.ino rather than guessing - see docs/setup.md.
-#define GAS_WARNING_THRESHOLD 1500
-#define GAS_DANGER_THRESHOLD  2800
+// MQ-5 raw ADC thresholds (0-4095 on ESP32), from mq5_calibration.ino - clean
+// open-air baseline settled at ~391 (converged tightly over several samples,
+// down from ~1872 right after the wiring fix, then ~258 - MQ-5 baselines
+// keep dropping as the heater element stabilizes with more total warm-up
+// time). Re-run that sketch again if you move/reseat the sensor.
+#define GAS_WARNING_THRESHOLD 691
+#define GAS_DANGER_THRESHOLD  1191
 
 // HX711 calibration factor: raw_reading / calibration_factor = grams.
 // Get this from firmware/esp32-sensor-node/hx711_calibration/hx711_calibration.ino.
