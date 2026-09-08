@@ -19,9 +19,42 @@ const IMAGE_PAGE_SIZE = 5;
 let currentImagePage = 1;
 let totalImagePages = 1;
 
+// A sensor reading older than this is treated as the device being offline,
+// rather than showing stale numbers as if they were current.
+const DEVICE_OFFLINE_THRESHOLD_MS = 15000;
+let lastReadingTime = null;
+let deviceOnline = null;
+const deviceStatusPill = document.getElementById('device-status');
+
 function setLastUpdated() {
   lastUpdatedEl.textContent = `Updated ${new Date().toLocaleTimeString()}`;
 }
+
+function updateDeviceStatus(online) {
+  if (deviceOnline === online) return;
+  deviceOnline = online;
+  if (online) {
+    deviceStatusPill.innerHTML = '<span class="status-dot"></span>Device: Connected';
+    deviceStatusPill.className = 'status-pill connected';
+  } else {
+    deviceStatusPill.innerHTML = '<span class="status-dot"></span>Device: Not Connected';
+    deviceStatusPill.className = 'status-pill offline';
+    renderReading({ temperature: 0, humidity: 0, gas_raw: 0, weight_g: 0 });
+  }
+}
+
+function handleReadingReceived(reading) {
+  lastReadingTime = Date.now();
+  updateDeviceStatus(true);
+  renderReading(reading);
+  setLastUpdated();
+}
+
+setInterval(() => {
+  if (lastReadingTime !== null && Date.now() - lastReadingTime > DEVICE_OFFLINE_THRESHOLD_MS) {
+    updateDeviceStatus(false);
+  }
+}, 2000);
 
 function gasBadgeClass(raw) {
   if (raw >= thresholds.gasDanger) return 'danger';
@@ -53,8 +86,6 @@ function renderReading(reading) {
   document.getElementById('card-gas').textContent = reading.gas_raw;
   gasBadge.textContent = gasLabel(reading.gas_raw);
   gasBadge.className = `badge ${gasBadgeClass(reading.gas_raw)}`;
-
-  setLastUpdated();
 }
 
 function renderSnapshotChips(image) {
@@ -199,7 +230,21 @@ async function loadSummary() {
   const res = await fetch('/api/dashboard/summary');
   const data = await res.json();
   thresholds = data.thresholds;
-  renderReading(data.latestReading);
+
+  if (data.latestReading) {
+    const age = Date.now() - new Date(`${data.latestReading.created_at}Z`).getTime();
+    if (age <= DEVICE_OFFLINE_THRESHOLD_MS) {
+      lastReadingTime = Date.now() - age;
+      updateDeviceStatus(true);
+      renderReading(data.latestReading);
+      setLastUpdated();
+    } else {
+      updateDeviceStatus(false);
+    }
+  } else {
+    updateDeviceStatus(false);
+  }
+
   if (data.latestImage) {
     latestImageId = data.latestImage.id;
     renderImage(data.latestImage);
@@ -210,7 +255,7 @@ async function loadSummary() {
 }
 
 socket.on('sensor:update', (reading) => {
-  renderReading(reading);
+  handleReadingReceived(reading);
 });
 
 socket.on('image:new', (image) => {

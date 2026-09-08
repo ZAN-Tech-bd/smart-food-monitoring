@@ -76,6 +76,8 @@ body {
 .status-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--muted); }
 .status-pill.connected { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .status-pill.connected .status-dot { background: var(--accent); box-shadow: 0 0 0 3px rgba(47, 158, 68, 0.18); }
+.status-pill.offline { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+.status-pill.offline .status-dot { background: var(--danger); }
 
 /* ---------- Layout ---------- */
 
