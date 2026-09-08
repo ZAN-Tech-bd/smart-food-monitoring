@@ -1,22 +1,10 @@
 /*
-  Smart Food Monitoring - Camera Node (ESP32-CAM, AI-Thinker module)
-
-  Captures a JPEG every CAPTURE_INTERVAL_MS and uploads it to the server as
-  multipart/form-data.
-
-  Board setting in Arduino IDE: "AI Thinker ESP32-CAM"
-  Flashing: connect an FTDI/USB-serial adapter, tie GPIO0 to GND while
-  resetting to enter flash mode, remove the jumper and reset again to run
-  normally. See docs/wiring.md and docs/setup.md.
-
-  No extra libraries needed beyond the ESP32 board package (esp_camera.h and
-  WiFi.h/HTTPClient.h ship with it).
+  Smart Food Monitoring - Modified for GC2145 (RHYX M21-45) Camera
 */
 
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include "esp_camera.h"
-
 #include "config.h"
 
 // AI-Thinker ESP32-CAM pin map
@@ -90,18 +78,13 @@ bool initCamera() {
   config.pin_sccb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000;
-  config.pixel_format = PIXFORMAT_JPEG;
-
-  if (psramFound()) {
-    config.frame_size = FRAMESIZE_SVGA; // 800x600
-    config.jpeg_quality = 12;
-    config.fb_count = 2;
-  } else {
-    config.frame_size = FRAMESIZE_VGA;
-    config.jpeg_quality = 15;
-    config.fb_count = 1;
-  }
+  
+  // === RHYX M21-45 Specific Hardware Settings ===
+  config.xclk_freq_hz = 10000000;         // Lower clock frequency for stability 
+  config.pixel_format = PIXFORMAT_RGB565; // Must capture raw formats
+  config.frame_size = FRAMESIZE_QVGA;     // 320x240 limit to prevent PSRAM overflow during software encoding
+  config.jpeg_quality = 12;
+  config.fb_count = 1;
 
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
@@ -117,13 +100,24 @@ bool uploadImage(camera_fb_t *fb) {
     return false;
   }
 
+  // === Convert Raw RGB565 to JPEG ===
+  uint8_t * jpeg_buf = NULL;
+  size_t jpeg_len = 0;
+  bool jpeg_converted = frame2jpg(fb, 80, &jpeg_buf, &jpeg_len); // Quality set to 80
+  
+  if (!jpeg_converted) {
+    Serial.println("JPEG compression failed");
+    return false;
+  }
+
   String boundary = "FoodMonitorBoundary";
   String head = "--" + boundary + "\r\n"
                 "Content-Disposition: form-data; name=\"image\"; filename=\"capture.jpg\"\r\n"
                 "Content-Type: image/jpeg\r\n\r\n";
   String tail = "\r\n--" + boundary + "--\r\n";
 
-  size_t totalLen = head.length() + fb->len + tail.length();
+  // Calculate payload size based on the new compressed JPEG length
+  size_t totalLen = head.length() + jpeg_len + tail.length();
 
   HTTPClient http;
   String url = String("http://") + SERVER_HOST + ":" + SERVER_PORT + "/api/images";
@@ -133,16 +127,25 @@ bool uploadImage(camera_fb_t *fb) {
   uint8_t *buf = (uint8_t *)malloc(totalLen);
   if (!buf) {
     Serial.println("Not enough memory to build upload buffer.");
+    free(jpeg_buf); // Free the software-encoded buffer
     return false;
   }
+  
   size_t pos = 0;
   memcpy(buf + pos, head.c_str(), head.length()); pos += head.length();
-  memcpy(buf + pos, fb->buf, fb->len); pos += fb->len;
+  
+  // Copy the converted JPEG buffer instead of raw camera buffer
+  memcpy(buf + pos, jpeg_buf, jpeg_len); pos += jpeg_len; 
+  
   memcpy(buf + pos, tail.c_str(), tail.length()); pos += tail.length();
 
   int status = http.POST(buf, totalLen);
   Serial.printf("POST /api/images -> %d\n", status);
+  
+  // Clean up all allocated memory
   free(buf);
+  free(jpeg_buf); 
+  
   http.end();
   return status >= 200 && status < 300;
 }
@@ -174,8 +177,6 @@ void setup() {
   }
 
   connectWiFi();
-
-  // Capture once shortly after boot so the dashboard has an image right away.
   lastCaptureMs = millis() - CAPTURE_INTERVAL_MS + 5000;
 }
 
