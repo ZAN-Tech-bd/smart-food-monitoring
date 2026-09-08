@@ -42,6 +42,9 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+// Bind explicitly to the IPv4 wildcard - on Windows, server.listen(PORT) alone
+// can end up IPv6-only, which silently refuses IPv4 connections from devices
+// like the ESP32 even though http://localhost:PORT still works locally.
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Smart Food Monitoring server running at http://localhost:${PORT}`);
 });

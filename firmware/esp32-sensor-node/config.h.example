@@ -1,10 +1,10 @@
 // Copy this file to config.h and fill in your own values. config.h is gitignored.
 
-#define WIFI_SSID     "Helloo World"
-#define WIFI_PASSWORD "bikan9700"
+#define WIFI_SSID     "your-wifi-name"
+#define WIFI_PASSWORD "your-wifi-password"
 
 // Local IP (or hostname) of the PC/Pi running the server, e.g. 192.168.1.50
-#define SERVER_HOST "192.168.0.8"
+#define SERVER_HOST "192.168.1.50"
 #define SERVER_PORT 3000
 
 // How often to sample sensors (ms). DHT11 tops out around 1 reading/second.
@@ -13,12 +13,15 @@
 // for a near-real-time dashboard.
 #define SERVER_POST_INTERVAL_MS 1000
 
-// MQ-5 raw ADC thresholds (0-4095 on ESP32), from mq5_calibration.ino - clean-air
-// baseline re-measured at ~258 after further sensor warm-up (was ~1872 right
-// after the wiring fix - MQ-5 baselines drop as the heater element
-// stabilizes). Re-run that sketch again if you move/reseat the sensor.
-#define GAS_WARNING_THRESHOLD 558
-#define GAS_DANGER_THRESHOLD  1058
+// DHT11 additive correction, from dht11_calibration.ino, added to every raw
+// reading. Leave at 0 until you've calibrated against a trusted reference.
+#define DHT_TEMP_OFFSET 0.0f
+#define DHT_HUMIDITY_OFFSET 0.0f
+
+// MQ-5 raw ADC thresholds (0-4095 on ESP32). Get these from
+// mq5_calibration.ino rather than guessing - see docs/setup.md.
+#define GAS_WARNING_THRESHOLD 1500
+#define GAS_DANGER_THRESHOLD  2800
 
 // HX711 calibration factor: raw_reading / calibration_factor = grams.
 // Get this from firmware/esp32-sensor-node/hx711_calibration/hx711_calibration.ino.
