@@ -284,6 +284,15 @@ void updateApiScreen() {
 }
 
 void updateLcd() {
+  // Defensive re-init before every draw: cheap, and self-heals if WiFi radio
+  // activity (TX bursts, modem-sleep wake-ups) ever briefly interfered with
+  // the I2C bus timing since the last write. Wire.setTimeOut() (set in
+  // setup()) means a corrupted transaction now fails silently instead of
+  // hanging the board - without this, the LCD could stay stuck on whatever
+  // was last successfully written, since we never retry a failed write.
+  lcd.init();
+  lcd.backlight();
+
   if (displayMode == DISPLAY_AI) {
     updateApiScreen();
   } else {
