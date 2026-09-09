@@ -7,7 +7,11 @@
 #define SERVER_HOST "192.168.1.50"
 #define SERVER_PORT 3000
 
-// How often to capture + upload a photo (ms). 72 minutes = 4320000, chosen so
-// ~20 photos/day exactly matches the Gemini free tier's daily quota - spreads
-// AI feedback evenly across the day instead of front-loading it.
-#define CAPTURE_INTERVAL_MS 4320000
+// How often to capture + upload a photo (ms). 1 minute = 60000 - set for
+// active testing. Note: at this rate the Gemini image-analysis quota
+// (20/day) will exhaust within the first ~20 minutes of each day; captures
+// after that fall back to the Groq sensor-only substitute (see
+// "Working within the Gemini free tier" in README.md) rather than a real
+// look at the photo. Set back to something like 4320000 (72 min) once
+// testing is done, to spread real analyses across the whole day instead.
+#define CAPTURE_INTERVAL_MS 60000
