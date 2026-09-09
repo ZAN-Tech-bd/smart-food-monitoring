@@ -195,6 +195,19 @@ main {
   padding: 4px 10px;
 }
 
+/* ---------- Live video ---------- */
+
+.live-video-body { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+
+#live-stream {
+  width: 100%;
+  max-width: 480px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  display: block;
+}
+
 /* ---------- Badges ---------- */
 
 .badge {

@@ -24,6 +24,7 @@ app.use('/api/sensors', require('./routes/sensors')(io));
 app.use('/api/images', require('./routes/images')(io));
 app.use('/api/dashboard', require('./routes/dashboard')(statusRouter.getCombinedStatus, statusRouter.getBudgetStatus));
 app.use('/api/status', statusRouter);
+app.use('/api/camera', require('./routes/camera')());
 
 // Frequent sensor-only Good/Not Good pulse via Groq (see services/groq.js) -
 // separate from Gemini's image-analysis quota, so this can run often.

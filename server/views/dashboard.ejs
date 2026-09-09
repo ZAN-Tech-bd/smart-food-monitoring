@@ -110,6 +110,18 @@
     </section>
 
     <section class="panel">
+      <div class="panel-header">
+        <h2>Live Video</h2>
+        <span class="muted" id="camera-status">Checking for camera…</span>
+      </div>
+      <div class="live-video-body">
+        <img id="live-stream" alt="Live camera feed" hidden />
+        <p class="gallery-empty" id="live-video-placeholder">Camera feed not started.</p>
+        <button type="button" class="page-btn" id="toggle-stream">Start Live View</button>
+      </div>
+    </section>
+
+    <section class="panel">
       <div class="panel-header"><h2>Sensor History</h2></div>
       <canvas id="history-chart" height="90"></canvas>
     </section>

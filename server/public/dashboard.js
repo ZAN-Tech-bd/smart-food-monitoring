@@ -275,5 +275,62 @@ socket.on('status:update', (status) => {
   renderStatus(status);
 });
 
+// ---------- Live video ----------
+// Streamed directly from the camera's own IP (not through this server),
+// since both it and the browser viewing this page are on the same local
+// network. Loaded on demand rather than automatically, since watching it
+// pauses the camera's periodic capture-and-upload for as long as it's open.
+
+let cameraIp = null;
+let streaming = false;
+
+const liveStreamImg = document.getElementById('live-stream');
+const liveVideoPlaceholder = document.getElementById('live-video-placeholder');
+const toggleStreamBtn = document.getElementById('toggle-stream');
+const cameraStatusEl = document.getElementById('camera-status');
+
+async function loadCameraStatus() {
+  try {
+    const res = await fetch('/api/camera/status');
+    const data = await res.json();
+    cameraIp = data ? data.ip : null;
+    cameraStatusEl.textContent = cameraIp
+      ? `Camera last checked in at ${cameraIp}`
+      : 'Camera not seen yet';
+  } catch (err) {
+    cameraStatusEl.textContent = 'Could not check camera status';
+  }
+}
+
+function startStream() {
+  if (!cameraIp) {
+    cameraStatusEl.textContent = 'Camera IP not known yet - wait for it to check in, then try again.';
+    return;
+  }
+  liveStreamImg.src = `http://${cameraIp}:81/stream?_=${Date.now()}`;
+  liveStreamImg.hidden = false;
+  liveVideoPlaceholder.hidden = true;
+  toggleStreamBtn.textContent = 'Stop Live View';
+  streaming = true;
+}
+
+function stopStream() {
+  liveStreamImg.removeAttribute('src'); // src = '' resolves to the current page URL, not "no src"
+  liveStreamImg.hidden = true;
+  liveVideoPlaceholder.hidden = false;
+  toggleStreamBtn.textContent = 'Start Live View';
+  streaming = false;
+}
+
+toggleStreamBtn.addEventListener('click', () => {
+  if (streaming) {
+    stopStream();
+  } else {
+    startStream();
+  }
+});
+
+loadCameraStatus();
+
 loadSummary();
 loadImagePage(1);

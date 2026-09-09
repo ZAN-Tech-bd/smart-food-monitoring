@@ -11,10 +11,19 @@
       shows it, scrolling the notes line if it's longer than 16 characters.
   Press the button again to switch back to sensor mode.
 
-  Boot order is WiFi-first: the board connects to WiFi/the server before
-  touching any sensor, and every sensor initializes with its own timeout so
-  a missing/faulty sensor can never block WiFi or hang the board - it just
-  reports 0 until it's connected.
+  POWER-AWARE BOOT: this board runs off plain USB power (no dedicated 5V
+  supply), and WiFi radio + LCD backlight + DHT11 + HX711 all drawing at
+  once was causing brownout resets during boot. Two things address that:
+    1. WiFi transmit power is capped (WIFI_POWER_13dBm instead of the ~20dBm
+       default) and modem sleep is enabled once connected - both cut the
+       current spikes WiFi causes, at the cost of some range/throughput
+       that doesn't matter for a device sitting near its router.
+    2. Peripheral init is staggered with short settle delays instead of
+       firing every init back-to-back, so current spikes from consecutive
+       steps don't stack on top of each other.
+  Boot is still WiFi-first (before any sensor), and every sensor still
+  initializes with its own timeout so a missing/faulty one can't hang the
+  board - it just reports 0 until it's connected.
 
   Required libraries (Arduino IDE Library Manager):
     - DHT sensor library (Adafruit) + Adafruit Unified Sensor
@@ -42,6 +51,13 @@
 // Momentary push button, other leg to GND. Uses the internal pull-up, so no
 // external resistor is needed - the pin reads LOW when pressed.
 #define BUTTON_PIN 13
+
+// Gap between power-hungry boot steps, letting the supply rail recover
+// before the next peripheral draws its own current spike.
+#define BOOT_SETTLE_MS 150
+// Capped WiFi TX power - cuts the current spikes WiFi association/transmit
+// bursts cause. Fine for a device close to its access point.
+#define WIFI_TX_POWER WIFI_POWER_13dBm
 
 DHT dht(DHT_PIN, DHT_TYPE);
 HX711 scale;
@@ -80,6 +96,7 @@ uint16_t apiScrollOffset = 0;
 
 void connectWiFi() {
   WiFi.mode(WIFI_STA);
+  WiFi.setTxPower(WIFI_TX_POWER);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to WiFi");
   unsigned long start = millis();
@@ -89,6 +106,7 @@ void connectWiFi() {
   }
   Serial.println();
   if (WiFi.status() == WL_CONNECTED) {
+    WiFi.setSleep(true); // modem sleep between packets - lower average draw
     Serial.print("WiFi connected, IP: ");
     Serial.println(WiFi.localIP());
   } else {
@@ -315,20 +333,24 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   Serial.println("BOOT: pins configured");
 
-  // WiFi/server connection comes first, before touching any sensor. That way
-  // the board is already online even if a sensor below is missing, slow, or
-  // hanging - no sensor gets to hold up WiFi.
+  // WiFi/server connection comes first, before touching any sensor, and at
+  // reduced TX power to avoid a big current spike right at boot. The board
+  // is online even if a sensor below is missing, slow, or hanging.
   connectWiFi();
   Serial.println("BOOT: connectWiFi() returned");
+  delay(BOOT_SETTLE_MS);
 
   // Every sensor init below is best-effort with its own timeout: if a given
   // sensor doesn't respond in time, we move on immediately and that sensor
   // just reports 0 (see readSensors()/postReading()) until it's connected -
-  // we never block waiting for every sensor to be present.
+  // we never block waiting for every sensor to be present. Each step also
+  // gets a brief settle pause afterward so its current draw doesn't stack
+  // on top of the next step's.
 
   Wire.begin();
   Wire.setTimeOut(1000); // ESP32 core: abort a stuck I2C transaction instead of hanging forever
   Serial.println("BOOT: Wire (I2C) started");
+  delay(BOOT_SETTLE_MS);
 
   lcd.init();
   lcd.backlight();
@@ -337,9 +359,11 @@ void setup() {
   lcd.setCursor(0, 1);
   lcd.print("Starting...");
   Serial.println("BOOT: LCD initialized");
+  delay(BOOT_SETTLE_MS);
 
   dht.begin();
   Serial.println("BOOT: DHT started");
+  delay(BOOT_SETTLE_MS);
 
   scale.begin(HX711_DT_PIN, HX711_SCK_PIN);
   scale.set_scale(HX711_CALIBRATION_FACTOR);
