@@ -4,7 +4,7 @@
 #define WIFI_PASSWORD "bikan9700"
 
 // Local IP (or hostname) of the PC/Pi running the server, e.g. 192.168.1.50
-#define SERVER_HOST "192.168.0.4"
+#define SERVER_HOST "192.168.0.9"
 #define SERVER_PORT 3000
 
 // How often to sample sensors (ms). DHT11 tops out around 1 reading/second.
